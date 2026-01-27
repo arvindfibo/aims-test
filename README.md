@@ -1,111 +1,147 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# AIMS Backend (NestJS)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS backend developer guide with pnpm, strict linting/formatting, Conventional Commits, and CI quality gates.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Quickstart
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+### macOS / Linux
 
 ```bash
-$ pnpm install
+cp .env.example .env
+pnpm install
+pnpm start:dev
 ```
 
-## Git workflow
+### Windows PowerShell
 
-- Use `pnpm commit` for an interactive Conventional Commits flow.
-- Pre-commit runs ESLint (with auto-fix) and Prettier on staged files.
-- Commit messages are validated with commitlint and must follow Conventional Commits.
+```powershell
+Copy-Item .env.example .env
+pnpm install
+pnpm start:dev
+```
 
-## CI
+### Windows CMD
 
-- Runs on pull requests and pushes to `main`/`master`.
-- Installs dependencies with `pnpm install --frozen-lockfile`.
-- Executes `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, and `pnpm build`.
-- Fails the pipeline on lint, format, typecheck, or build errors.
+```cmd
+copy .env.example .env
+pnpm install
+pnpm start:dev
+```
 
-## Compile and run the project
+## Prerequisites
+
+- Node.js 20 LTS (or newer)
+- pnpm 10+
+- Git
+
+Verify:
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+node -v
+pnpm -v
+git --version
 ```
 
-## Run tests
+## Environment Setup
+
+- Copy `.env.example` to `.env` and fill in required values.
+- Never commit `.env` to version control.
+
+## Install & Run
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+pnpm install
+pnpm start:dev
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Build and run production:
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+pnpm build
+pnpm start:prod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Scripts Reference
 
-## Resources
+- `pnpm lint` — ESLint (fails on warnings)
+- `pnpm lint:fix` — ESLint auto-fix
+- `pnpm format` — Prettier write
+- `pnpm format:check` — Prettier check
+- `pnpm typecheck` — TypeScript typecheck (no emit)
+- `pnpm test` — unit tests
+- `pnpm test:e2e` — end-to-end tests
+- `pnpm build` — NestJS build
+- `pnpm commit` — interactive Conventional Commit
 
-Check out a few resources that may come in handy when working with NestJS:
+## Code Quality & Formatting
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+On every commit, staged files are automatically checked:
 
-## Support
+- **ESLint** runs on staged TS/JS and auto-fixes where possible
+- **Prettier** formats staged code and docs
+- The commit is blocked if lint/format fails
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Run checks manually:
 
-## Stay in touch
+```bash
+pnpm lint
+pnpm format:check
+pnpm typecheck
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## Git Workflow
 
-## License
+Recommended flow:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```bash
+git checkout -b feat/short-description
+pnpm lint
+pnpm test
+pnpm commit
+git push -u origin feat/short-description
+```
+
+Open a pull request and ensure CI is green before merging.
+
+## Commit Standards (Conventional Commits)
+
+Use the interactive commit flow:
+
+```bash
+pnpm commit
+```
+
+Examples:
+
+```
+feat(auth): add refresh token rotation
+fix(users): handle null profile
+chore(ci): tighten lint rules
+```
+
+Commit messages are validated by commitlint. Invalid messages are rejected.
+
+## Troubleshooting
+
+**Husky hooks not running**
+
+- Reinstall hooks: `pnpm install`
+- Ensure Git hooks path is not overridden:
+  - `git config --get core.hooksPath` should be empty or `.husky`
+
+**CI fails with frozen lockfile**
+
+- Run `pnpm install` locally and commit `pnpm-lock.yaml`
+
+**Lint/format errors**
+
+- Run `pnpm lint:fix` and `pnpm format`
+
+**Windows shell issues**
+
+- Use PowerShell or CMD commands above
+- If hooks fail in CMD, try running Git Bash for Git-related tasks
+
+## Repository Notes
+
+- pnpm is required for installs and scripts
