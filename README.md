@@ -31,6 +31,19 @@
 $ pnpm install
 ```
 
+## Git workflow
+
+- Use `pnpm commit` for an interactive Conventional Commits flow.
+- Pre-commit runs ESLint (with auto-fix) and Prettier on staged files.
+- Commit messages are validated with commitlint and must follow Conventional Commits.
+
+## CI
+
+- Runs on pull requests and pushes to `main`/`master`.
+- Installs dependencies with `pnpm install --frozen-lockfile`.
+- Executes `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, and `pnpm build`.
+- Fails the pipeline on lint, format, typecheck, or build errors.
+
 ## Compile and run the project
 
 ```bash
