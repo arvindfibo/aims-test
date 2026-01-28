@@ -12,6 +12,7 @@ import { Repository, DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { SignupDto, SignupResponseDto } from './dto/signup.dto';
 import { VerifyEmailDto, VerifyEmailResponseDto } from './dto/verify-email.dto';
+import { LoginDto, LoginResponseDto } from './dto/login.dto';
 import { User } from '../entities/user.entity';
 import { CompanyGroup } from '../entities/company-group.entity';
 import { EmailService } from '../email/email.service';
@@ -242,6 +243,83 @@ export class AuthService {
       throw new InternalServerErrorException('An error occurred during email verification');
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  async login(loginDto: LoginDto): Promise<LoginResponseDto> {
+    try {
+      // Find user by email
+      const user = await this.userRepository.findOne({
+        where: {
+          email: loginDto.email,
+        },
+      });
+
+      if (!user) {
+        this.logger.warn(`Login attempt with invalid email: ${loginDto.email}`);
+        throw new UnauthorizedException('Invalid email or password');
+      }
+
+      // Check if user is active
+      if (!user.is_active) {
+        this.logger.warn(`Login attempt for inactive user: ${user.email}`);
+        throw new UnauthorizedException('Account is inactive. Please contact support.');
+      }
+
+      // Check if user has a password (for SSO users, password might be null)
+      if (!user.password) {
+        this.logger.warn(`Login attempt for user without password: ${user.email}`);
+        throw new UnauthorizedException('Invalid email or password');
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+
+      if (!isPasswordValid) {
+        this.logger.warn(`Invalid password attempt for user: ${user.email}`);
+        throw new UnauthorizedException('Invalid email or password');
+      }
+
+      // Check if email is verified (optional - you might want to allow unverified users)
+      if (!user.is_verified) {
+        this.logger.warn(`Login attempt for unverified user: ${user.email}`);
+        throw new UnauthorizedException('Please verify your email before logging in.');
+      }
+
+      // Generate JWT token
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        is_verified: user.is_verified,
+      };
+
+      const accessToken = this.jwtService.sign(payload);
+
+      this.logger.log(`User ${user.email} logged in successfully`);
+
+      return {
+        access_token: accessToken,
+        token_type: 'Bearer',
+        user: {
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name || undefined,
+          is_active: user.is_active,
+          is_verified: user.is_verified,
+        },
+        message: 'Login successful.',
+      };
+    } catch (error) {
+      this.logger.error(`Login failed: ${error instanceof Error ? error.message : String(error)}`);
+
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException('An error occurred during login');
     }
   }
 }

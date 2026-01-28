@@ -20,6 +20,7 @@ import {
 import { AuthService } from './auth.service';
 import { SignupDto, SignupResponseDto } from './dto/signup.dto';
 import { VerifyEmailDto, VerifyEmailResponseDto } from './dto/verify-email.dto';
+import { LoginDto, LoginResponseDto } from './dto/login.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -195,5 +196,78 @@ export class AuthController {
   ): Promise<VerifyEmailResponseDto> {
     this.logger.log(`Email verification attempt for: ${verifyEmailDto.email}`);
     return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'User login with email and password',
+    description:
+      'Authenticates a user with email and password. Returns a JWT token upon successful authentication. User must be verified to login.',
+  })
+  @ApiBody({
+    type: LoginDto,
+    description: 'Email and password for authentication',
+    examples: {
+      example1: {
+        summary: 'Login example',
+        value: {
+          email: 'john.doe@example.com',
+          password: 'SecurePassword123!',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful, JWT token returned',
+    type: LoginResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation error - Invalid input data',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['email must be an email', 'password should not be empty'],
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid credentials, inactive account, or unverified email',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Invalid email or password',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred during login',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async login(@Body(ValidationPipe) loginDto: LoginDto): Promise<LoginResponseDto> {
+    this.logger.log(`Login attempt for email: ${loginDto.email}`);
+    return this.authService.login(loginDto);
   }
 }
