@@ -8,6 +8,15 @@
   "scripts": {
     "build": "nest build",
     "commit": "cz",
+    "typeorm": "typeorm-ts-node-commonjs -d src/config/database.config.ts",
+    "migration:generate": "pnpm typeorm migration:generate",
+    "migration:create": "typeorm-ts-node-commonjs migration:create",
+    "migration:run": "pnpm typeorm migration:run",
+    "migration:revert": "pnpm typeorm migration:revert",
+    "migration:rollback": "pnpm typeorm migration:revert",
+    "migration:show": "pnpm typeorm migration:show",
+    "migration:status": "pnpm typeorm migration:show",
+    "db:test": "ts-node scripts/test-db-connection.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
@@ -29,8 +38,11 @@
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/typeorm": "^11.0.0",
+    "pg": "^8.17.2",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "typeorm": "^0.3.28"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",
