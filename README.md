@@ -61,6 +61,74 @@ pnpm build
 pnpm start:prod
 ```
 
+## Docker (dev)
+
+Make sure `.env` exists (copy from `.env.example`) before running containers.
+
+### Option A: Postgres only (backend runs locally)
+
+Start Postgres:
+
+```bash
+pnpm db:up
+```
+
+Run backend locally:
+
+```bash
+pnpm start:dev
+```
+
+Migrations/seed (local):
+
+```bash
+pnpm migration:run
+pnpm seed
+pnpm seed:role
+```
+
+Optional DB sanity check:
+
+```bash
+pnpm db:test
+```
+
+Stop Postgres:
+
+```bash
+pnpm db:down
+```
+
+### Option B: Full app (prod-like build in Docker)
+
+Start API + Postgres:
+
+```bash
+pnpm full:rebuild
+```
+
+Migrations/seed (inside container):
+
+```bash
+pnpm full:migrate
+pnpm full:seed
+```
+
+Stop:
+
+```bash
+pnpm full:down
+```
+
+Handy extras:
+
+```bash
+pnpm full:logs
+pnpm db:reset
+pnpm full:reset
+pnpm full:migrate:seed
+```
+
 ## Scripts Reference
 
 - `pnpm lint` — ESLint (fails on warnings)

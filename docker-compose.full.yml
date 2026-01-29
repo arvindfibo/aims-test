@@ -1,0 +1,37 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://aims_user:aims_password_123@db:5432/aims_erp_db?schema=public
+    ports:
+      - '5000:5000'
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aims_user
+      POSTGRES_PASSWORD: aims_password_123
+      POSTGRES_DB: aims_erp_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - aims_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U aims_user -d aims_erp_db']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  aims_postgres_data:
