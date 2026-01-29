@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.env.*
+.idea
+.vscode
+coverage
+dist
+node_modules
+.pnpm-store
+*.log
+*.md
+!.dockerignore
+!README.md

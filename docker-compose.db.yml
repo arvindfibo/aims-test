@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aims_user
+      POSTGRES_PASSWORD: aims_password_123
+      POSTGRES_DB: aims_erp_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - aims_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U aims_user -d aims_erp_db']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  aims_postgres_data:
