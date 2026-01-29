@@ -31,4 +31,4 @@ COPY --from=builder --chown=node:node /app/nest-cli.json ./nest-cli.json
 USER node
 
 EXPOSE 5000
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]
