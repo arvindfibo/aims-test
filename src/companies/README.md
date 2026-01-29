@@ -2,7 +2,7 @@
 
 ## Overview
 
-Production-ready company creation API with role-based access control. Only `GROUP_ADMIN` users can create companies.
+Production-ready company APIs with role-based access control. `GROUP_ADMIN` users can create, update, and delete any company. `COMPANY_ADMIN` users can update and delete only their own company.
 
 ## Files Created
 
@@ -11,9 +11,14 @@ Production-ready company creation API with role-based access control. Only `GROU
    - All fields from migration included
    - Proper relationships with CompanyGroup and User
 
-2. **DTOs**: `src/companies/dto/create-company.dto.ts`
-   - `CreateCompanyDto` - Request DTO with validation
-   - `CompanyResponseDto` - Response DTO
+2. **DTOs**:
+   - `src/companies/dto/create-company.dto.ts`
+     - `CreateCompanyDto` - Request DTO with validation
+     - `CompanyResponseDto` - Response DTO
+   - `src/companies/dto/update-company.dto.ts`
+     - `UpdateCompanyDto` - Update request DTO with validation
+   - `src/companies/dto/delete-company.dto.ts`
+     - `DeleteCompanyResponseDto` - Soft delete response DTO
    - Comprehensive validation rules (PAN, GSTIN, email, URL, etc.)
 
 3. **Service**: `src/companies/companies.service.ts`
@@ -23,7 +28,7 @@ Production-ready company creation API with role-based access control. Only `GROU
    - Error handling
 
 4. **Controller**: `src/companies/companies.controller.ts`
-   - RESTful endpoint
+   - RESTful endpoints
    - Swagger documentation
    - Role-based access control
 
@@ -94,6 +99,44 @@ Production-ready company creation API with role-based access control. Only `GROU
 }
 ```
 
+### Update Company
+
+**PATCH** `/companies/:id`
+
+**Authorization**: Required (JWT Bearer Token)
+
+**Role Required**: `GROUP_ADMIN` or `COMPANY_ADMIN`
+
+**Request Body** (any subset of fields):
+
+```json
+{
+  "name": "Acme Corporation Updated",
+  "email": "hello@acme.com",
+  "is_active": true
+}
+```
+
+**Response** (200 OK): Returns updated company (same shape as create).
+
+### Delete Company (Soft Delete)
+
+**DELETE** `/companies/:id`
+
+**Authorization**: Required (JWT Bearer Token)
+
+**Role Required**: `GROUP_ADMIN` or `COMPANY_ADMIN`
+
+**Response** (200 OK):
+
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "message": "Company deleted successfully",
+  "deleted_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
 ## Validation Rules
 
 ### Required Fields
@@ -113,8 +156,9 @@ Production-ready company creation API with role-based access control. Only `GROU
 ## Security Features
 
 1. **Role-Based Access Control**
-   - Only `GROUP_ADMIN` can create companies
-   - Uses `@Roles('GROUP_ADMIN')` decorator
+   - `GROUP_ADMIN` can create, update, delete any company
+   - `COMPANY_ADMIN` can update and delete their own company
+   - Uses `@Roles('GROUP_ADMIN', 'COMPANY_ADMIN')` where applicable
    - Guard validates role before allowing access
 
 2. **Transaction Safety**
@@ -236,6 +280,4 @@ To extend this API, you can add:
 
 - GET `/companies` - List companies (with pagination)
 - GET `/companies/:id` - Get company details
-- PUT `/companies/:id` - Update company
-- DELETE `/companies/:id` - Delete company (soft delete)
 - GET `/companies/:id/divisions` - Get company divisions
