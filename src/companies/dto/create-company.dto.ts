@@ -196,6 +196,50 @@ export class CreateCompanyDto {
   is_active?: boolean;
 }
 
+class CompanyGroupResponseDto {
+  @ApiProperty({
+    description: 'Company group ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Company group name',
+    example: 'Acme Corporation Group',
+  })
+  name: string;
+
+  @ApiPropertyOptional({
+    description: 'Company group code',
+    example: 'ACME',
+  })
+  code?: string;
+
+  @ApiPropertyOptional({
+    description: 'Company group description',
+    example: 'Leading technology company group',
+  })
+  description?: string;
+
+  @ApiProperty({
+    description: 'Is active',
+    example: true,
+  })
+  is_active: boolean;
+
+  @ApiProperty({
+    description: 'Created at',
+    example: '2024-01-01T00:00:00.000Z',
+  })
+  created_at: Date;
+
+  @ApiProperty({
+    description: 'Updated at',
+    example: '2024-01-01T00:00:00.000Z',
+  })
+  updated_at: Date;
+}
+
 export class CompanyResponseDto {
   @ApiProperty({
     description: 'Company ID',
@@ -208,6 +252,12 @@ export class CompanyResponseDto {
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
   company_group_id: string;
+
+  @ApiProperty({
+    description: 'Company group object (parent company group)',
+    type: CompanyGroupResponseDto,
+  })
+  company_group: CompanyGroupResponseDto;
 
   @ApiProperty({
     description: 'Company name',

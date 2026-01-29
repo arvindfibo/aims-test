@@ -1,7 +1,9 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Param,
   UseGuards,
   Request,
   HttpCode,
@@ -76,5 +78,74 @@ export class CompaniesController {
     @Request() req: AuthenticatedRequest,
   ): Promise<CompanyResponseDto> {
     return this.companiesService.create(createCompanyDto, req.user.id);
+  }
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  @Roles('GROUP_ADMIN')
+  @ApiOperation({
+    summary: 'Get all companies in the group',
+    description:
+      "Returns all companies within the authenticated group admin's company group. Only GROUP_ADMIN can access this endpoint. The endpoint automatically identifies the company group based on the authenticated user.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of companies retrieved successfully',
+    type: [CompanyResponseDto],
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user does not have GROUP_ADMIN role or company group is not active',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Company group not found for the user',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error',
+  })
+  async findAll(@Request() req: AuthenticatedRequest): Promise<CompanyResponseDto[]> {
+    return this.companiesService.findAllByGroupAdmin(req.user.id);
+  }
+
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  @Roles('GROUP_ADMIN')
+  @ApiOperation({
+    summary: 'Get a company by ID',
+    description:
+      "Returns a single company by its ID. Only GROUP_ADMIN can access this endpoint. The company must belong to the authenticated user's company group.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Company retrieved successfully',
+    type: CompanyResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user does not have GROUP_ADMIN role or company group is not active',
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Company not found or does not belong to user's company group",
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error',
+  })
+  async findOne(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<CompanyResponseDto> {
+    return this.companiesService.findOneByGroupAdmin(id, req.user.id);
   }
 }
