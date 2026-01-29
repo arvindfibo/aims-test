@@ -1,7 +1,10 @@
 import {
   Controller,
   Post,
+  Patch,
+  Delete,
   Body,
+  Param,
   UseGuards,
   Request,
   HttpCode,
@@ -13,6 +16,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import type { Request as ExpressRequest } from 'express';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto, CompanyResponseDto } from './dto/create-company.dto';
+import { UpdateCompanyDto } from './dto/update-company.dto';
+import { DeleteCompanyResponseDto } from './dto/delete-company.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -28,6 +33,7 @@ interface AuthenticatedUser {
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: AuthenticatedUser;
+  userRoles?: string[];
 }
 
 @ApiTags('Companies')
@@ -76,5 +82,79 @@ export class CompaniesController {
     @Request() req: AuthenticatedRequest,
   ): Promise<CompanyResponseDto> {
     return this.companiesService.create(createCompanyDto, req.user.id);
+  }
+
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  @Roles('GROUP_ADMIN', 'COMPANY_ADMIN')
+  @ApiOperation({
+    summary: 'Update a company',
+    description:
+      'GROUP_ADMIN can update any company. COMPANY_ADMIN can update only their company. Company group ID cannot be changed.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Company updated successfully',
+    type: CompanyResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - validation error or no fields provided',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user does not have required role or access',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Company not found',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflict - company name, registration number, PAN, or GSTIN already exists',
+  })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async update(
+    @Param('id') id: string,
+    @Body() updateCompanyDto: UpdateCompanyDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<CompanyResponseDto> {
+    return this.companiesService.update(id, updateCompanyDto, req.user.id, req.userRoles);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @Roles('GROUP_ADMIN', 'COMPANY_ADMIN')
+  @ApiOperation({
+    summary: 'Delete a company (soft delete)',
+    description:
+      'Soft deletes a company. GROUP_ADMIN can delete any company. COMPANY_ADMIN can delete only their company.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Company deleted successfully',
+    type: DeleteCompanyResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user does not have required role or access',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Company not found',
+  })
+  async remove(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<DeleteCompanyResponseDto> {
+    return this.companiesService.remove(id, req.user.id, req.userRoles);
   }
 }
