@@ -143,7 +143,7 @@ export class CompaniesService {
         `Company "${savedCompany.name}" created successfully by user ${userId} in company group ${createCompanyDto.company_group_id}`,
       );
 
-      return this.mapToResponseDto(savedCompany);
+      return this.mapToResponseDto(savedCompany, companyGroup);
     } catch (error) {
       await queryRunner.rollbackTransaction();
 
@@ -161,6 +161,100 @@ export class CompaniesService {
       throw new InternalServerErrorException('Failed to create company');
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  async findAllByGroupAdmin(userId: string): Promise<CompanyResponseDto[]> {
+    try {
+      // Find the company group where user is the super admin
+      const companyGroup = await this.companyGroupRepository.findOne({
+        where: { super_admin_id: userId },
+      });
+
+      if (!companyGroup) {
+        throw new NotFoundException(
+          'Company group not found. User is not a super admin of any company group.',
+        );
+      }
+
+      if (!companyGroup.is_active) {
+        throw new ForbiddenException('Company group is not active');
+      }
+
+      const companies = await this.companyRepository.find({
+        where: {
+          company_group_id: companyGroup.id,
+          deleted_at: IsNull(),
+        },
+        order: {
+          created_at: 'DESC',
+        },
+      });
+
+      this.logger.log(
+        `Found ${companies.length} companies for group admin ${userId} in company group ${companyGroup.id}`,
+      );
+
+      return companies.map((company) => this.mapToResponseDto(company, companyGroup));
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to get companies for group admin: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new InternalServerErrorException('Failed to retrieve companies');
+    }
+  }
+
+  async findOneByGroupAdmin(companyId: string, userId: string): Promise<CompanyResponseDto> {
+    try {
+      // Find the company group where user is the super admin
+      const companyGroup = await this.companyGroupRepository.findOne({
+        where: { super_admin_id: userId },
+      });
+
+      if (!companyGroup) {
+        throw new NotFoundException(
+          'Company group not found. User is not a super admin of any company group.',
+        );
+      }
+
+      // Verify company group is active
+      if (!companyGroup.is_active) {
+        throw new ForbiddenException('Company group is not active');
+      }
+
+      // Find the company by ID
+      const company = await this.companyRepository.findOne({
+        where: {
+          id: companyId,
+          company_group_id: companyGroup.id,
+          deleted_at: IsNull(),
+        },
+      });
+
+      if (!company) {
+        throw new NotFoundException(
+          `Company with ID ${companyId} not found or does not belong to your company group`,
+        );
+      }
+
+      this.logger.log(
+        `Company ${companyId} retrieved successfully by group admin ${userId} from company group ${companyGroup.id}`,
+      );
+
+      return this.mapToResponseDto(company, companyGroup);
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to get company ${companyId} for group admin: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new InternalServerErrorException('Failed to retrieve company');
     }
   }
 
@@ -371,7 +465,7 @@ export class CompaniesService {
 
       this.logger.log(`Company "${savedCompany.name}" updated successfully by user ${userId}`);
 
-      return this.mapToResponseDto(savedCompany);
+      return this.mapToResponseDto(savedCompany, companyGroup);
     } catch (error) {
       await queryRunner.rollbackTransaction();
 
@@ -469,10 +563,19 @@ export class CompaniesService {
     }
   }
 
-  private mapToResponseDto(company: Company): CompanyResponseDto {
+  private mapToResponseDto(company: Company, companyGroup: CompanyGroup): CompanyResponseDto {
     return {
       id: company.id,
       company_group_id: company.company_group_id,
+      company_group: {
+        id: companyGroup.id,
+        name: companyGroup.name,
+        code: companyGroup.code || undefined,
+        description: companyGroup.description || undefined,
+        is_active: companyGroup.is_active,
+        created_at: companyGroup.created_at,
+        updated_at: companyGroup.updated_at,
+      },
       name: company.name,
       legal_name: company.legal_name || undefined,
       company_type: company.company_type as CompanyType | undefined,
