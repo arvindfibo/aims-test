@@ -8,13 +8,22 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, IsNull } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { SignupDto, SignupResponseDto } from './dto/signup.dto';
 import { VerifyEmailDto, VerifyEmailResponseDto } from './dto/verify-email.dto';
 import { LoginDto, LoginResponseDto } from './dto/login.dto';
+import { ResendOtpDto, ResendOtpResponseDto } from './dto/resend-otp.dto';
+import {
+  ForgotPasswordDto,
+  ForgotPasswordResponseDto,
+  ResetPasswordDto,
+  ResetPasswordResponseDto,
+} from './dto/forgot-password.dto';
 import { User } from '../entities/user.entity';
 import { CompanyGroup } from '../entities/company-group.entity';
+import { Role } from '../entities/role.entity';
+import { UserRole } from '../entities/user-role.entity';
 import { EmailService } from '../email/email.service';
 import { OtpService } from '../otp/otp.service';
 
@@ -28,6 +37,10 @@ export class AuthService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(CompanyGroup)
     private readonly companyGroupRepository: Repository<CompanyGroup>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
     private readonly dataSource: DataSource,
     private readonly emailService: EmailService,
     private readonly otpService: OtpService,
@@ -102,6 +115,44 @@ export class AuthService {
 
       if (!savedCompanyGroup) {
         throw new InternalServerErrorException('Failed to create company group');
+      }
+
+      // Verify user is the super_admin of the company group before assigning role
+      if (savedCompanyGroup.super_admin_id !== savedUser.id) {
+        throw new InternalServerErrorException('User is not the super admin of the company group');
+      }
+
+      // Assign GROUP_ADMIN role to the user who created the company group
+      const groupAdminRole = await queryRunner.manager.findOne(Role, {
+        where: { name: 'GROUP_ADMIN' },
+      });
+
+      if (!groupAdminRole) {
+        this.logger.warn('GROUP_ADMIN role not found. Please run seeders first.');
+      } else {
+        // Verify no duplicate role assignment exists
+        const existingUserRole = await queryRunner.manager.findOne(UserRole, {
+          where: {
+            user_id: savedUser.id,
+            role_id: groupAdminRole.id,
+            company_id: IsNull(),
+          },
+        });
+
+        if (!existingUserRole) {
+          const userRole = queryRunner.manager.create(UserRole, {
+            user_id: savedUser.id,
+            role_id: groupAdminRole.id,
+            company_id: null, // GROUP_ADMIN is at company group level, not company level
+          });
+
+          await queryRunner.manager.save(UserRole, userRole);
+          this.logger.log(
+            `Assigned GROUP_ADMIN role to user ${savedUser.email} for company group ${savedCompanyGroup.name}`,
+          );
+        } else {
+          this.logger.warn(`User ${savedUser.email} already has GROUP_ADMIN role assigned`);
+        }
       }
 
       await queryRunner.commitTransaction();
@@ -320,6 +371,183 @@ export class AuthService {
       }
 
       throw new InternalServerErrorException('An error occurred during login');
+    }
+  }
+
+  async resendOtp(resendOtpDto: ResendOtpDto): Promise<ResendOtpResponseDto> {
+    try {
+      // Find user by email
+      const user = await this.userRepository.findOne({
+        where: {
+          email: resendOtpDto.email,
+        },
+      });
+
+      if (!user) {
+        // Don't reveal if user exists or not for security
+        this.logger.warn(`Resend OTP attempt for non-existent email: ${resendOtpDto.email}`);
+        return {
+          message: 'If the email exists, an OTP has been sent.',
+          email: resendOtpDto.email,
+        };
+      }
+
+      // Check if already verified
+      if (user.is_verified) {
+        throw new BadRequestException('Email is already verified');
+      }
+
+      // Generate and send new OTP
+      try {
+        this.logger.log(`Resending OTP for user ${user.id}`);
+        const otpCode = await this.otpService.createEmailVerificationOtp(user.id);
+        this.logger.log(`OTP generated: ${otpCode} for user ${user.email}`);
+
+        await this.emailService.sendEmailVerificationOtp(user.email, user.first_name, otpCode);
+        this.logger.log(`✅ Email verification OTP resent successfully to ${user.email}`);
+      } catch (emailError) {
+        this.logger.error(`❌ Failed to resend verification email to ${user.email}`);
+        this.logger.error(
+          `Error details: ${emailError instanceof Error ? emailError.message : String(emailError)}`,
+        );
+        throw new InternalServerErrorException('Failed to send OTP email');
+      }
+
+      return {
+        message: 'OTP has been sent to your email address.',
+        email: user.email,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Resend OTP failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException('An error occurred while resending OTP');
+    }
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<ForgotPasswordResponseDto> {
+    try {
+      // Find user by email
+      const user = await this.userRepository.findOne({
+        where: {
+          email: forgotPasswordDto.email,
+        },
+      });
+
+      if (!user) {
+        // Don't reveal if user exists or not for security
+        this.logger.warn(
+          `Forgot password attempt for non-existent email: ${forgotPasswordDto.email}`,
+        );
+        return {
+          message: 'If the email exists, a password reset OTP has been sent.',
+          email: forgotPasswordDto.email,
+        };
+      }
+
+      // Check if user is active
+      if (!user.is_active) {
+        throw new UnauthorizedException('Account is inactive. Please contact support.');
+      }
+
+      // Generate and send password reset OTP
+      try {
+        this.logger.log(`Generating password reset OTP for user ${user.id}`);
+        const otpCode = await this.otpService.createPasswordResetOtp(user.id);
+        this.logger.log(`Password reset OTP generated: ${otpCode} for user ${user.email}`);
+
+        await this.emailService.sendPasswordResetOtp(user.email, user.first_name, otpCode);
+        this.logger.log(`✅ Password reset OTP sent successfully to ${user.email}`);
+      } catch (emailError) {
+        this.logger.error(`❌ Failed to send password reset email to ${user.email}`);
+        this.logger.error(
+          `Error details: ${emailError instanceof Error ? emailError.message : String(emailError)}`,
+        );
+        throw new InternalServerErrorException('Failed to send password reset email');
+      }
+
+      return {
+        message: 'Password reset OTP has been sent to your email address.',
+        email: user.email,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Forgot password failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      if (error instanceof UnauthorizedException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException('An error occurred while processing password reset');
+    }
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<ResetPasswordResponseDto> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Find user by email
+      const user = await this.userRepository.findOne({
+        where: {
+          email: resetPasswordDto.email,
+        },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid email or OTP code');
+      }
+
+      // Check if user is active
+      if (!user.is_active) {
+        throw new UnauthorizedException('Account is inactive. Please contact support.');
+      }
+
+      // Verify OTP
+      const isOtpValid = await this.otpService.verifyPasswordResetOtp(
+        user.id,
+        resetPasswordDto.otp_code,
+      );
+
+      if (!isOtpValid) {
+        throw new UnauthorizedException('Invalid or expired OTP code');
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(resetPasswordDto.new_password, this.SALT_ROUNDS);
+
+      // Update user password
+      user.password = hashedPassword;
+      await queryRunner.manager.save(User, user);
+
+      await queryRunner.commitTransaction();
+
+      this.logger.log(`Password reset successfully for user ${user.email}`);
+
+      return {
+        message: 'Password has been reset successfully.',
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      this.logger.error(
+        `Password reset failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException('An error occurred during password reset');
+    } finally {
+      await queryRunner.release();
     }
   }
 }

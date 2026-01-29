@@ -156,4 +156,126 @@ If you didn't create an account with AIMS ERP, please ignore this email.
 © ${new Date().getFullYear()} AIMS ERP. All rights reserved.
     `.trim();
   }
+
+  async sendPasswordResetOtp(email: string, firstName: string, otpCode: string): Promise<void> {
+    try {
+      const apiKey = process.env.BREVO_API_KEY;
+      if (!apiKey) {
+        throw new Error('BREVO_API_KEY is not configured in environment variables');
+      }
+
+      const senderEmail = process.env.BREVO_SENDER_EMAIL || 'noreply@example.com';
+      const senderName = process.env.BREVO_SENDER_NAME || 'AIMS ERP';
+
+      this.logger.log(
+        `Preparing password reset email to ${email} from ${senderEmail} (${senderName})`,
+      );
+
+      const sendSmtpEmail = new brevo.SendSmtpEmail();
+      sendSmtpEmail.subject = 'Reset Your Password - AIMS ERP';
+      sendSmtpEmail.htmlContent = this.getPasswordResetTemplate(firstName, otpCode);
+      sendSmtpEmail.textContent = this.getPasswordResetTemplateText(firstName, otpCode);
+      sendSmtpEmail.sender = { name: senderName, email: senderEmail };
+      sendSmtpEmail.to = [{ email, name: firstName }];
+      sendSmtpEmail.replyTo = { email: senderEmail, name: senderName };
+
+      this.logger.log(`Sending password reset email via Brevo API to ${email}...`);
+      const result = await this.brevoApi.sendTransacEmail(sendSmtpEmail);
+      const messageId = result.body?.messageId || 'N/A';
+
+      this.logger.log(`Brevo API Response: ${JSON.stringify(result.body, null, 2)}`);
+      this.logger.log(`✅ Password reset OTP sent to ${email}. Message ID: ${messageId}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to send password reset OTP to ${email}`);
+      this.logger.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+
+      if (error instanceof Error) {
+        this.logger.error(`Error name: ${error.name}`);
+        if (error.stack) {
+          this.logger.error(`Stack: ${error.stack}`);
+        }
+      }
+
+      if (error && typeof error === 'object' && 'response' in error) {
+        const brevoError = error as { response?: { body?: unknown } };
+        this.logger.error(
+          `Brevo API response: ${JSON.stringify(brevoError.response?.body, null, 2)}`,
+        );
+      }
+
+      throw new InternalServerErrorException('Failed to send password reset email');
+    }
+  }
+
+  private getPasswordResetTemplate(firstName: string, otpCode: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>Reset Password - AIMS ERP</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f4; margin: 0; padding: 0;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f4f4f4; padding: 20px;">
+          <tr>
+            <td align="center">
+              <table role="presentation" style="max-width: 600px; width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <!-- Header -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">AIMS ERP</h1>
+                  </td>
+                </tr>
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 40px 30px;">
+                    <h2 style="color: #333333; margin-top: 0; font-size: 20px; font-weight: 600;">Hello ${firstName}!</h2>
+                    <p style="font-size: 16px; color: #555555; margin: 0 0 20px 0;">We received a request to reset your password. Use the OTP code below to reset your password:</p>
+                    
+                    <!-- OTP Code Box -->
+                    <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
+                      <tr>
+                        <td align="center" style="background-color: #f8f9fa; border: 2px dashed #667eea; border-radius: 8px; padding: 30px;">
+                          <p style="font-size: 14px; color: #666666; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px;">Your Reset Code</p>
+                          <div style="font-size: 36px; font-weight: bold; color: #667eea; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otpCode}</div>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <p style="font-size: 14px; color: #666666; margin: 20px 0;">This code will expire in <strong>10 minutes</strong>.</p>
+                    <p style="font-size: 14px; color: #666666; margin: 30px 0 0 0;">If you didn't request a password reset, please ignore this email. Your password will remain unchanged.</p>
+                  </td>
+                </tr>
+                <!-- Footer -->
+                <tr>
+                  <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                    <p style="font-size: 12px; color: #999999; margin: 0;">© ${new Date().getFullYear()} AIMS ERP. All rights reserved.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+  }
+
+  private getPasswordResetTemplateText(firstName: string, otpCode: string): string {
+    return `
+Hello ${firstName}!
+
+We received a request to reset your password. Use the OTP code below to reset your password:
+
+Your Reset Code: ${otpCode}
+
+This code will expire in 10 minutes.
+
+If you didn't request a password reset, please ignore this email. Your password will remain unchanged.
+
+© ${new Date().getFullYear()} AIMS ERP. All rights reserved.
+    `.trim();
+  }
 }

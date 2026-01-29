@@ -17,6 +17,8 @@
     "migration:show": "pnpm typeorm migration:show",
     "migration:status": "pnpm typeorm migration:show",
     "db:test": "ts-node scripts/test-db-connection.ts",
+    "seed": "ts-node -r tsconfig-paths/register scripts/seed.ts",
+    "seed:role": "ts-node -r tsconfig-paths/register scripts/seed.ts RoleSeeder",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",

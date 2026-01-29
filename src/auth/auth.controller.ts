@@ -21,6 +21,13 @@ import { AuthService } from './auth.service';
 import { SignupDto, SignupResponseDto } from './dto/signup.dto';
 import { VerifyEmailDto, VerifyEmailResponseDto } from './dto/verify-email.dto';
 import { LoginDto, LoginResponseDto } from './dto/login.dto';
+import { ResendOtpDto, ResendOtpResponseDto } from './dto/resend-otp.dto';
+import {
+  ForgotPasswordDto,
+  ForgotPasswordResponseDto,
+  ResetPasswordDto,
+  ResetPasswordResponseDto,
+} from './dto/forgot-password.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -269,5 +276,199 @@ export class AuthController {
   async login(@Body(ValidationPipe) loginDto: LoginDto): Promise<LoginResponseDto> {
     this.logger.log(`Login attempt for email: ${loginDto.email}`);
     return this.authService.login(loginDto);
+  }
+
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend email verification OTP',
+    description: 'Resends the email verification OTP to the user. Only works for unverified users.',
+  })
+  @ApiBody({
+    type: ResendOtpDto,
+    description: 'Email address to resend OTP',
+    examples: {
+      example1: {
+        summary: 'Resend OTP example',
+        value: {
+          email: 'john.doe@example.com',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP resent successfully',
+    type: ResendOtpResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Email already verified',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'string',
+          example: 'Email is already verified',
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred while resending OTP',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async resendOtp(@Body(ValidationPipe) resendOtpDto: ResendOtpDto): Promise<ResendOtpResponseDto> {
+    this.logger.log(`Resend OTP request for email: ${resendOtpDto.email}`);
+    return this.authService.resendOtp(resendOtpDto);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Request password reset OTP',
+    description:
+      'Sends a password reset OTP to the user email address. Works for verified users only.',
+  })
+  @ApiBody({
+    type: ForgotPasswordDto,
+    description: 'Email address for password reset',
+    examples: {
+      example1: {
+        summary: 'Forgot password example',
+        value: {
+          email: 'john.doe@example.com',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset OTP sent successfully',
+    type: ForgotPasswordResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Account is inactive',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Account is inactive. Please contact support.',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred while processing password reset',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async forgotPassword(
+    @Body(ValidationPipe) forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<ForgotPasswordResponseDto> {
+    this.logger.log(`Forgot password request for email: ${forgotPasswordDto.email}`);
+    return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reset password with OTP',
+    description:
+      'Resets the user password using the OTP code received via email. Requires email, OTP code, and new password.',
+  })
+  @ApiBody({
+    type: ResetPasswordDto,
+    description: 'Email, OTP code, and new password',
+    examples: {
+      example1: {
+        summary: 'Reset password example',
+        value: {
+          email: 'john.doe@example.com',
+          otp_code: '123456',
+          new_password: 'NewSecurePassword123!',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset successfully',
+    type: ResetPasswordResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'array',
+          items: { type: 'string' },
+          example: [
+            'otp_code must be exactly 6 digits',
+            'new_password must be longer than or equal to 8 characters',
+          ],
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid email or OTP code',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Invalid or expired OTP code',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred during password reset',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async resetPassword(
+    @Body(ValidationPipe) resetPasswordDto: ResetPasswordDto,
+  ): Promise<ResetPasswordResponseDto> {
+    this.logger.log(`Reset password request for email: ${resetPasswordDto.email}`);
+    return this.authService.resetPassword(resetPasswordDto);
   }
 }

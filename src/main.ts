@@ -24,7 +24,19 @@ async function bootstrap() {
     .setTitle('AIMS ERP API')
     .setDescription('AIMS ERP Backend API Documentation')
     .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth', // This name here is important for matching up with @ApiBearerAuth() in your controller!
+    )
     .addTag('auth', 'Authentication endpoints')
+    .addTag('Companies', 'Company management endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
