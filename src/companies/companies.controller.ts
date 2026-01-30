@@ -21,6 +21,7 @@ import { CreateCompanyDto, CompanyResponseDto, CompanyType } from './dto/create-
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { DeleteCompanyResponseDto } from './dto/delete-company.dto';
 import { GetCompaniesQueryDto } from './dto/get-companies-query.dto';
+import { PaginatedCompaniesResponseDto } from './dto/paginated-companies-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -289,14 +290,14 @@ export class CompaniesController {
     type: Number,
   })
   @ApiOperation({
-    summary: 'Get all companies in the group',
+    summary: 'Get all companies in the group with pagination, filtering, and sorting',
     description:
-      "Returns all companies within the authenticated group admin's company group. Only GROUP_ADMIN can access this endpoint. The endpoint automatically identifies the company group based on the authenticated user.",
+      "Returns paginated companies within the authenticated group admin's company group. Supports filtering by all company fields, sorting by multiple fields, and offset-based pagination. Default: 10 items per page, sorted by created_at DESC. Only GROUP_ADMIN can access this endpoint.",
   })
   @ApiResponse({
     status: 200,
-    description: 'List of companies retrieved successfully',
-    type: [CompanyResponseDto],
+    description: 'Paginated list of companies retrieved successfully',
+    type: PaginatedCompaniesResponseDto,
   })
   @ApiResponse({
     status: 401,
@@ -318,7 +319,7 @@ export class CompaniesController {
   async findAll(
     @Query() query: GetCompaniesQueryDto,
     @Request() req: AuthenticatedRequest,
-  ): Promise<CompanyResponseDto[]> {
+  ): Promise<PaginatedCompaniesResponseDto> {
     return this.companiesService.findAllByGroupAdmin(req.user.id, query);
   }
 

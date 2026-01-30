@@ -15,6 +15,7 @@ import { CreateCompanyDto, CompanyResponseDto, CompanyType } from './dto/create-
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { DeleteCompanyResponseDto } from './dto/delete-company.dto';
 import { GetCompaniesQueryDto } from './dto/get-companies-query.dto';
+import { PaginatedCompaniesResponseDto } from './dto/paginated-companies-response.dto';
 
 @Injectable()
 export class CompaniesService {
@@ -168,7 +169,7 @@ export class CompaniesService {
   async findAllByGroupAdmin(
     userId: string,
     filters: GetCompaniesQueryDto = {} as GetCompaniesQueryDto,
-  ): Promise<CompanyResponseDto[]> {
+  ): Promise<PaginatedCompaniesResponseDto> {
     try {
       // Find the company group where user is the super admin
       const companyGroup = await this.companyGroupRepository.findOne({
@@ -186,7 +187,15 @@ export class CompaniesService {
       }
 
       if (filters.company_group_id && filters.company_group_id !== companyGroup.id) {
-        return [];
+        return {
+          data: [],
+          pagination: {
+            total: 0,
+            offset: filters.offset ?? 0,
+            limit: filters.limit ?? 10,
+            hasMore: false,
+          },
+        };
       }
 
       const {
@@ -349,21 +358,37 @@ export class CompaniesService {
         updated_at: 'company.updated_at',
       };
 
+      // Get total count before applying ordering and pagination
+      const total = await qb.getCount();
+
+      // Apply sorting
       const sortBy =
         sort_by && sortFieldMap[sort_by] ? sortFieldMap[sort_by] : 'company.created_at';
       const sortOrder = sort_order === 'ASC' ? 'ASC' : 'DESC';
       qb.orderBy(sortBy, sortOrder);
 
+      // Apply pagination
       const safeLimit = Math.min(Math.max(limit ?? 10, 1), 100);
-      qb.skip(offset ?? 0).take(safeLimit);
+      const safeOffset = Math.max(offset ?? 0, 0);
+      qb.skip(safeOffset).take(safeLimit);
 
       const companies = await qb.getMany();
 
+      const hasMore = safeOffset + companies.length < total;
+
       this.logger.log(
-        `Found ${companies.length} companies for group admin ${userId} in company group ${companyGroup.id}`,
+        `Found ${companies.length} companies (offset: ${safeOffset}, limit: ${safeLimit}, total: ${total}, sortBy: ${sortBy}, sortOrder: ${sortOrder}) for group admin ${userId} in company group ${companyGroup.id}`,
       );
 
-      return companies.map((company) => this.mapToResponseDto(company, companyGroup));
+      return {
+        data: companies.map((company) => this.mapToResponseDto(company, companyGroup)),
+        pagination: {
+          total,
+          offset: safeOffset,
+          limit: safeLimit,
+          hasMore,
+        },
+      };
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
         throw error;
