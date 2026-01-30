@@ -17,7 +17,7 @@ import { CompanyGroupsModule } from './company-groups/company-groups.module';
     RolesModule,
     UserInvitesModule,
     CompanyGroupsModule,
-    ProjectsModule
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
