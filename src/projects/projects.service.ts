@@ -20,6 +20,7 @@ import {
 } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { DeleteProjectResponseDto } from './dto/delete-project.dto';
+import { GetProjectsQueryDto } from './dto/get-projects-query.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -112,20 +113,56 @@ export class ProjectsService {
   }
 
   async findAll(
-    tenderId: string | undefined,
+    filters: GetProjectsQueryDto,
     userId: string,
     userRoles: string[] = [],
   ): Promise<ProjectResponseDto[]> {
     try {
-      let projects: Project[] = [];
+      const {
+        tender_id: tenderId,
+        sort_by,
+        sort_order,
+        id,
+        status,
+        currency,
+        project_code,
+        project_name,
+        work_order_number_date,
+        name_of_work,
+        project_manager,
+        remarks,
+        client_representative_name,
+        client_representative_phone,
+        stipulated_comencement_date_from,
+        stipulated_comencement_date_to,
+        actual_comencement_date_from,
+        actual_comencement_date_to,
+        stipulated_completion_date_from,
+        stipulated_completion_date_to,
+        actual_completion_date_from,
+        actual_completion_date_to,
+        created_at_from,
+        created_at_to,
+        updated_at_from,
+        updated_at_to,
+        initial_contract_value_min,
+        initial_contract_value_max,
+        completion_contract_value_min,
+        completion_contract_value_max,
+        balance_due_against_invoice_min,
+        balance_due_against_invoice_max,
+        holdover_min,
+        holdover_max,
+        security_min,
+        security_max,
+      } = filters;
+
+      const qb = this.projectRepository.createQueryBuilder('project');
+      qb.where('project.deleted_at IS NULL');
 
       if (tenderId) {
         await this.ensureTenderReadAccess(tenderId, userId, userRoles);
-
-        projects = await this.projectRepository.find({
-          where: { tender_id: tenderId, deleted_at: IsNull() },
-          order: { project_name: 'ASC' },
-        });
+        qb.andWhere('project.tender_id = :tenderId', { tenderId });
       } else {
         const tenderIds = await this.getAccessibleTenderIds(userId, userRoles);
 
@@ -133,12 +170,204 @@ export class ProjectsService {
           return [];
         }
 
-        projects = await this.projectRepository.find({
-          where: { tender_id: In(tenderIds), deleted_at: IsNull() },
-          order: { project_name: 'ASC' },
+        qb.andWhere('project.tender_id IN (:...tenderIds)', { tenderIds });
+      }
+
+      if (id) {
+        qb.andWhere('project.id = :id', { id });
+      }
+
+      if (status) {
+        qb.andWhere('project.status = :status', { status });
+      }
+
+      if (currency) {
+        qb.andWhere('project.currency = :currency', { currency });
+      }
+
+      if (project_code) {
+        qb.andWhere('project.project_code = :project_code', { project_code });
+      }
+
+      if (project_name) {
+        qb.andWhere('project.project_name = :project_name', { project_name });
+      }
+
+      if (work_order_number_date) {
+        qb.andWhere('project.work_order_number_date = :work_order_number_date', {
+          work_order_number_date,
         });
       }
 
+      if (name_of_work) {
+        qb.andWhere('project.name_of_work = :name_of_work', { name_of_work });
+      }
+
+      if (project_manager) {
+        qb.andWhere('project.project_manager = :project_manager', { project_manager });
+      }
+
+      if (remarks) {
+        qb.andWhere('project.remarks = :remarks', { remarks });
+      }
+
+      if (client_representative_name) {
+        qb.andWhere('project.client_representative_name = :client_representative_name', {
+          client_representative_name,
+        });
+      }
+
+      if (client_representative_phone) {
+        qb.andWhere('project.client_representative_phone = :client_representative_phone', {
+          client_representative_phone,
+        });
+      }
+
+      if (stipulated_comencement_date_from) {
+        qb.andWhere('project.stipulated_comencement_date >= :stipulated_comencement_date_from', {
+          stipulated_comencement_date_from,
+        });
+      }
+
+      if (stipulated_comencement_date_to) {
+        qb.andWhere('project.stipulated_comencement_date <= :stipulated_comencement_date_to', {
+          stipulated_comencement_date_to,
+        });
+      }
+
+      if (actual_comencement_date_from) {
+        qb.andWhere('project.actual_comencement_date >= :actual_comencement_date_from', {
+          actual_comencement_date_from,
+        });
+      }
+
+      if (actual_comencement_date_to) {
+        qb.andWhere('project.actual_comencement_date <= :actual_comencement_date_to', {
+          actual_comencement_date_to,
+        });
+      }
+
+      if (stipulated_completion_date_from) {
+        qb.andWhere('project.stipulated_completion_date >= :stipulated_completion_date_from', {
+          stipulated_completion_date_from,
+        });
+      }
+
+      if (stipulated_completion_date_to) {
+        qb.andWhere('project.stipulated_completion_date <= :stipulated_completion_date_to', {
+          stipulated_completion_date_to,
+        });
+      }
+
+      if (actual_completion_date_from) {
+        qb.andWhere('project.actual_completion_date >= :actual_completion_date_from', {
+          actual_completion_date_from,
+        });
+      }
+
+      if (actual_completion_date_to) {
+        qb.andWhere('project.actual_completion_date <= :actual_completion_date_to', {
+          actual_completion_date_to,
+        });
+      }
+
+      if (created_at_from) {
+        qb.andWhere('project.created_at >= :created_at_from', { created_at_from });
+      }
+
+      if (created_at_to) {
+        qb.andWhere('project.created_at <= :created_at_to', { created_at_to });
+      }
+
+      if (updated_at_from) {
+        qb.andWhere('project.updated_at >= :updated_at_from', { updated_at_from });
+      }
+
+      if (updated_at_to) {
+        qb.andWhere('project.updated_at <= :updated_at_to', { updated_at_to });
+      }
+
+      if (initial_contract_value_min !== undefined) {
+        qb.andWhere('project.initial_contract_value >= :initial_contract_value_min', {
+          initial_contract_value_min,
+        });
+      }
+
+      if (initial_contract_value_max !== undefined) {
+        qb.andWhere('project.initial_contract_value <= :initial_contract_value_max', {
+          initial_contract_value_max,
+        });
+      }
+
+      if (completion_contract_value_min !== undefined) {
+        qb.andWhere('project.completion_contract_value >= :completion_contract_value_min', {
+          completion_contract_value_min,
+        });
+      }
+
+      if (completion_contract_value_max !== undefined) {
+        qb.andWhere('project.completion_contract_value <= :completion_contract_value_max', {
+          completion_contract_value_max,
+        });
+      }
+
+      if (balance_due_against_invoice_min !== undefined) {
+        qb.andWhere('project.balance_due_against_invoice >= :balance_due_against_invoice_min', {
+          balance_due_against_invoice_min,
+        });
+      }
+
+      if (balance_due_against_invoice_max !== undefined) {
+        qb.andWhere('project.balance_due_against_invoice <= :balance_due_against_invoice_max', {
+          balance_due_against_invoice_max,
+        });
+      }
+
+      if (holdover_min !== undefined) {
+        qb.andWhere('project.holdover >= :holdover_min', { holdover_min });
+      }
+
+      if (holdover_max !== undefined) {
+        qb.andWhere('project.holdover <= :holdover_max', { holdover_max });
+      }
+
+      if (security_min !== undefined) {
+        qb.andWhere('project.security >= :security_min', { security_min });
+      }
+
+      if (security_max !== undefined) {
+        qb.andWhere('project.security <= :security_max', { security_max });
+      }
+
+      const sortFieldMap: Record<string, string> = {
+        project_name: 'project.project_name',
+        project_code: 'project.project_code',
+        status: 'project.status',
+        currency: 'project.currency',
+        stipulated_comencement_date: 'project.stipulated_comencement_date',
+        actual_comencement_date: 'project.actual_comencement_date',
+        stipulated_completion_date: 'project.stipulated_completion_date',
+        actual_completion_date: 'project.actual_completion_date',
+        initial_contract_value: 'project.initial_contract_value',
+        completion_contract_value: 'project.completion_contract_value',
+        balance_due_against_invoice: 'project.balance_due_against_invoice',
+        holdover: 'project.holdover',
+        security: 'project.security',
+        created_at: 'project.created_at',
+        updated_at: 'project.updated_at',
+      };
+
+      const sortBy =
+        sort_by && sortFieldMap[sort_by] ? sortFieldMap[sort_by] : 'project.project_name';
+      const sortOrder = sort_order === 'DESC' ? 'DESC' : 'ASC';
+      qb.orderBy(sortBy, sortOrder);
+
+      const offset = filters.offset ?? 0;
+      const limit = filters.limit ?? 10;
+      const safeLimit = Math.min(Math.max(limit, 1), 100);
+      qb.skip(offset).take(safeLimit);
+
+      const projects = await qb.getMany();
       return projects.map((project) => this.mapToResponseDto(project));
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {

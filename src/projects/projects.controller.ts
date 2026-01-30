@@ -14,12 +14,13 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto, ProjectResponseDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { DeleteProjectResponseDto } from './dto/delete-project.dto';
+import { GetProjectsQueryDto } from './dto/get-projects-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -88,13 +89,7 @@ export class ProjectsController {
   @ApiOperation({
     summary: 'Get all projects',
     description:
-      'Returns all projects. Optionally filter by tender_id. Access is limited to GROUP_ADMIN (within group) and COMPANY_ADMIN (within their company).',
-  })
-  @ApiQuery({
-    name: 'tender_id',
-    required: false,
-    description: 'Filter projects by tender ID',
-    type: String,
+      'Returns all projects. Supports query filters and sorting. Access is limited to GROUP_ADMIN (within group) and COMPANY_ADMIN (within their company).',
   })
   @ApiResponse({
     status: 200,
@@ -113,11 +108,12 @@ export class ProjectsController {
     status: 404,
     description: 'Company or company group not found',
   })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async findAll(
-    @Query('tender_id') tenderId: string | undefined,
+    @Query() query: GetProjectsQueryDto,
     @Request() req: AuthenticatedRequest,
   ): Promise<ProjectResponseDto[]> {
-    return this.projectsService.findAll(tenderId, req.user.id, req.userRoles);
+    return this.projectsService.findAll(query, req.user.id, req.userRoles);
   }
 
   @Get(':id')
