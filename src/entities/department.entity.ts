@@ -6,20 +6,18 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
   ManyToOne,
-  OneToMany,
   JoinColumn,
 } from 'typeorm';
-import { Company } from './company.entity';
+import { Division } from './division.entity';
 import { User } from './user.entity';
-import { Department } from './department.entity';
 
-@Entity('divisions')
-export class Division {
+@Entity('departments')
+export class Department {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid' })
-  company_id: string;
+  division_id: string;
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
@@ -34,7 +32,7 @@ export class Division {
   is_active: boolean;
 
   @Column({ type: 'uuid', nullable: true })
-  division_admin_user_id: string | null;
+  department_admin_user_id: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, unknown> | null;
@@ -45,13 +43,13 @@ export class Division {
   @Column({ type: 'uuid', nullable: true })
   updated_by: string | null;
 
-  @ManyToOne(() => Company)
-  @JoinColumn({ name: 'company_id' })
-  company: Company;
+  @ManyToOne(() => Division)
+  @JoinColumn({ name: 'division_id' })
+  division: Division;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'division_admin_user_id' })
-  division_admin: User | null;
+  @JoinColumn({ name: 'department_admin_user_id' })
+  department_admin: User | null;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'created_by' })
@@ -60,9 +58,6 @@ export class Division {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'updated_by' })
   updater: User | null;
-
-  @OneToMany(() => Department, (department) => department.division)
-  departments: Department[];
 
   @CreateDateColumn()
   created_at: Date;

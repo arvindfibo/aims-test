@@ -8,13 +8,15 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Not, IsNull } from 'typeorm';
+import { Repository, DataSource, Not, IsNull, ILike } from 'typeorm';
 import { Division } from '../entities/division.entity';
 import { Company } from '../entities/company.entity';
 import { CompanyGroup } from '../entities/company-group.entity';
 import { CreateDivisionDto, DivisionResponseDto } from './dto/create-division.dto';
 import { UpdateDivisionDto } from './dto/update-division.dto';
 import { DeleteDivisionResponseDto } from './dto/delete-division.dto';
+import { ListDivisionsQueryDto } from './dto/list-divisions-query.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 
 @Injectable()
 export class DivisionsService {
@@ -156,7 +158,10 @@ export class DivisionsService {
     return this.mapToResponseDto(division);
   }
 
-  async findAllByCompany(companyId: string): Promise<DivisionResponseDto[]> {
+  async findAllByCompany(
+    companyId: string,
+    query: ListDivisionsQueryDto,
+  ): Promise<PaginatedResponseDto<DivisionResponseDto>> {
     // Verify company exists
     const company = await this.companyRepository.findOne({
       where: { id: companyId, deleted_at: IsNull() },
@@ -166,12 +171,34 @@ export class DivisionsService {
       throw new NotFoundException(`Company with ID ${companyId} not found`);
     }
 
-    const divisions = await this.divisionRepository.find({
-      where: { company_id: companyId, deleted_at: IsNull() },
-      order: { created_at: 'DESC' },
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const sortBy = query.sortBy ?? 'created_at';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const where: Record<string, unknown> = {
+      company_id: companyId,
+      deleted_at: IsNull(),
+    };
+    if (query.name?.trim()) {
+      where.name = ILike(`%${query.name.trim()}%`);
+    }
+    if (query.code?.trim()) {
+      where.code = ILike(`%${query.code.trim()}%`);
+    }
+    if (query.is_active !== undefined) {
+      where.is_active = query.is_active;
+    }
+
+    const [divisions, total] = await this.divisionRepository.findAndCount({
+      where,
+      order: { [sortBy]: sortOrder },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
-    return divisions.map((division) => this.mapToResponseDto(division));
+    const data = divisions.map((division) => this.mapToResponseDto(division));
+    return new PaginatedResponseDto(data, total, page, limit);
   }
 
   async update(
