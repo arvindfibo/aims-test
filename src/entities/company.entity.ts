@@ -6,10 +6,12 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { CompanyGroup } from './company-group.entity';
 import { User } from './user.entity';
+import { Division } from './division.entity';
 
 @Entity('companies')
 export class Company {
@@ -97,6 +99,9 @@ export class Company {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'updated_by' })
   updater: User | null;
+
+  @OneToMany(() => Division, (division) => division.company)
+  divisions: Division[];
 
   @CreateDateColumn()
   created_at: Date;

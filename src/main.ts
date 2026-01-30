@@ -53,6 +53,7 @@ async function bootstrap() {
     .addTag('Company Groups', 'Company group management endpoints')
     .addTag('Roles', 'Role management endpoints')
     .addTag('User Invites', 'User invitation management endpoints')
+    .addTag('Divisions', 'Division management endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
