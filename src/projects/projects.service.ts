@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In, IsNull } from 'typeorm';
 import { Project } from '../entities/project.entity';
+import { Tender } from '../entities/tender.entity';
 import { Company } from '../entities/company.entity';
 import { CompanyGroup } from '../entities/company-group.entity';
 import {
@@ -19,6 +20,7 @@ import {
 } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { DeleteProjectResponseDto } from './dto/delete-project.dto';
+import { GetProjectsQueryDto } from './dto/get-projects-query.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -27,6 +29,8 @@ export class ProjectsService {
   constructor(
     @InjectRepository(Project)
     private readonly projectRepository: Repository<Project>,
+    @InjectRepository(Tender)
+    private readonly tenderRepository: Repository<Tender>,
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
     @InjectRepository(CompanyGroup)
@@ -44,55 +48,14 @@ export class ProjectsService {
     await queryRunner.startTransaction();
 
     try {
-      const normalizedRoles = this.normalizeRoles(userRoles);
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
-
-      let company: Company | null = null;
-
-      if (isGroupAdmin) {
-        const companyGroup = await queryRunner.manager.findOne(CompanyGroup, {
-          where: { super_admin_id: userId },
-        });
-
-        if (!companyGroup) {
-          throw new NotFoundException(
-            'Company group not found. User is not a super admin of any company group.',
-          );
-        }
-
-        if (!companyGroup.is_active) {
-          throw new ForbiddenException('Company group is not active');
-        }
-
-        company = await queryRunner.manager.findOne(Company, {
-          where: {
-            id: createProjectDto.company_id,
-            company_group_id: companyGroup.id,
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (!company) {
-          throw new NotFoundException(
-            `Company with ID ${createProjectDto.company_id} not found in your company group`,
-          );
-        }
-      } else {
-        company = await queryRunner.manager.findOne(Company, {
-          where: {
-            id: createProjectDto.company_id,
-            company_admin_user_id: userId,
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (!company) {
-          throw new ForbiddenException('Access denied to create a project for this company');
-        }
-      }
+      const tender = await this.ensureTenderWriteAccess(
+        createProjectDto.tender_id,
+        userId,
+        userRoles,
+      );
 
       const project = this.projectRepository.create({
-        company_id: company.id,
+        tender_id: tender.id,
         project_code: createProjectDto.project_code,
         project_name: createProjectDto.project_name,
         work_order_number_date: createProjectDto.work_order_number_date || null,
@@ -149,61 +112,262 @@ export class ProjectsService {
     }
   }
 
-  async findAll(userId: string, userRoles: string[] = []): Promise<ProjectResponseDto[]> {
+  async findAll(
+    filters: GetProjectsQueryDto,
+    userId: string,
+    userRoles: string[] = [],
+  ): Promise<ProjectResponseDto[]> {
     try {
-      const normalizedRoles = this.normalizeRoles(userRoles);
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+      const {
+        tender_id: tenderId,
+        sort_by,
+        sort_order,
+        id,
+        status,
+        currency,
+        project_code,
+        project_name,
+        work_order_number_date,
+        name_of_work,
+        project_manager,
+        remarks,
+        client_representative_name,
+        client_representative_phone,
+        stipulated_comencement_date_from,
+        stipulated_comencement_date_to,
+        actual_comencement_date_from,
+        actual_comencement_date_to,
+        stipulated_completion_date_from,
+        stipulated_completion_date_to,
+        actual_completion_date_from,
+        actual_completion_date_to,
+        created_at_from,
+        created_at_to,
+        updated_at_from,
+        updated_at_to,
+        initial_contract_value_min,
+        initial_contract_value_max,
+        completion_contract_value_min,
+        completion_contract_value_max,
+        balance_due_against_invoice_min,
+        balance_due_against_invoice_max,
+        holdover_min,
+        holdover_max,
+        security_min,
+        security_max,
+      } = filters;
 
-      if (isGroupAdmin) {
-        const companyGroup = await this.companyGroupRepository.findOne({
-          where: { super_admin_id: userId },
-        });
+      const qb = this.projectRepository.createQueryBuilder('project');
+      qb.where('project.deleted_at IS NULL');
 
-        if (!companyGroup) {
-          throw new NotFoundException(
-            'Company group not found. User is not a super admin of any company group.',
-          );
-        }
+      if (tenderId) {
+        await this.ensureTenderReadAccess(tenderId, userId, userRoles);
+        qb.andWhere('project.tender_id = :tenderId', { tenderId });
+      } else {
+        const tenderIds = await this.getAccessibleTenderIds(userId, userRoles);
 
-        if (!companyGroup.is_active) {
-          throw new ForbiddenException('Company group is not active');
-        }
-
-        const companies = await this.companyRepository.find({
-          where: { company_group_id: companyGroup.id, deleted_at: IsNull() },
-          select: ['id'],
-        });
-
-        if (companies.length === 0) {
+        if (tenderIds.length === 0) {
           return [];
         }
 
-        const companyIds = companies.map((company) => company.id);
+        qb.andWhere('project.tender_id IN (:...tenderIds)', { tenderIds });
+      }
 
-        const projects = await this.projectRepository.find({
-          where: { company_id: In(companyIds), deleted_at: IsNull() },
-          order: { project_name: 'ASC' },
+      if (id) {
+        qb.andWhere('project.id = :id', { id });
+      }
+
+      if (status) {
+        qb.andWhere('project.status = :status', { status });
+      }
+
+      if (currency) {
+        qb.andWhere('project.currency = :currency', { currency });
+      }
+
+      if (project_code) {
+        qb.andWhere('project.project_code = :project_code', { project_code });
+      }
+
+      if (project_name) {
+        qb.andWhere('project.project_name = :project_name', { project_name });
+      }
+
+      if (work_order_number_date) {
+        qb.andWhere('project.work_order_number_date = :work_order_number_date', {
+          work_order_number_date,
         });
-
-        return projects.map((project) => this.mapToResponseDto(project));
       }
 
-      const companies = await this.companyRepository.find({
-        where: { company_admin_user_id: userId, deleted_at: IsNull() },
-        select: ['id'],
-      });
-
-      if (companies.length === 0) {
-        throw new NotFoundException('Company not found for the authenticated company admin');
+      if (name_of_work) {
+        qb.andWhere('project.name_of_work = :name_of_work', { name_of_work });
       }
 
-      const companyIds = companies.map((company) => company.id);
+      if (project_manager) {
+        qb.andWhere('project.project_manager = :project_manager', { project_manager });
+      }
 
-      const projects = await this.projectRepository.find({
-        where: { company_id: In(companyIds), deleted_at: IsNull() },
-        order: { project_name: 'ASC' },
-      });
+      if (remarks) {
+        qb.andWhere('project.remarks = :remarks', { remarks });
+      }
 
+      if (client_representative_name) {
+        qb.andWhere('project.client_representative_name = :client_representative_name', {
+          client_representative_name,
+        });
+      }
+
+      if (client_representative_phone) {
+        qb.andWhere('project.client_representative_phone = :client_representative_phone', {
+          client_representative_phone,
+        });
+      }
+
+      if (stipulated_comencement_date_from) {
+        qb.andWhere('project.stipulated_comencement_date >= :stipulated_comencement_date_from', {
+          stipulated_comencement_date_from,
+        });
+      }
+
+      if (stipulated_comencement_date_to) {
+        qb.andWhere('project.stipulated_comencement_date <= :stipulated_comencement_date_to', {
+          stipulated_comencement_date_to,
+        });
+      }
+
+      if (actual_comencement_date_from) {
+        qb.andWhere('project.actual_comencement_date >= :actual_comencement_date_from', {
+          actual_comencement_date_from,
+        });
+      }
+
+      if (actual_comencement_date_to) {
+        qb.andWhere('project.actual_comencement_date <= :actual_comencement_date_to', {
+          actual_comencement_date_to,
+        });
+      }
+
+      if (stipulated_completion_date_from) {
+        qb.andWhere('project.stipulated_completion_date >= :stipulated_completion_date_from', {
+          stipulated_completion_date_from,
+        });
+      }
+
+      if (stipulated_completion_date_to) {
+        qb.andWhere('project.stipulated_completion_date <= :stipulated_completion_date_to', {
+          stipulated_completion_date_to,
+        });
+      }
+
+      if (actual_completion_date_from) {
+        qb.andWhere('project.actual_completion_date >= :actual_completion_date_from', {
+          actual_completion_date_from,
+        });
+      }
+
+      if (actual_completion_date_to) {
+        qb.andWhere('project.actual_completion_date <= :actual_completion_date_to', {
+          actual_completion_date_to,
+        });
+      }
+
+      if (created_at_from) {
+        qb.andWhere('project.created_at >= :created_at_from', { created_at_from });
+      }
+
+      if (created_at_to) {
+        qb.andWhere('project.created_at <= :created_at_to', { created_at_to });
+      }
+
+      if (updated_at_from) {
+        qb.andWhere('project.updated_at >= :updated_at_from', { updated_at_from });
+      }
+
+      if (updated_at_to) {
+        qb.andWhere('project.updated_at <= :updated_at_to', { updated_at_to });
+      }
+
+      if (initial_contract_value_min !== undefined) {
+        qb.andWhere('project.initial_contract_value >= :initial_contract_value_min', {
+          initial_contract_value_min,
+        });
+      }
+
+      if (initial_contract_value_max !== undefined) {
+        qb.andWhere('project.initial_contract_value <= :initial_contract_value_max', {
+          initial_contract_value_max,
+        });
+      }
+
+      if (completion_contract_value_min !== undefined) {
+        qb.andWhere('project.completion_contract_value >= :completion_contract_value_min', {
+          completion_contract_value_min,
+        });
+      }
+
+      if (completion_contract_value_max !== undefined) {
+        qb.andWhere('project.completion_contract_value <= :completion_contract_value_max', {
+          completion_contract_value_max,
+        });
+      }
+
+      if (balance_due_against_invoice_min !== undefined) {
+        qb.andWhere('project.balance_due_against_invoice >= :balance_due_against_invoice_min', {
+          balance_due_against_invoice_min,
+        });
+      }
+
+      if (balance_due_against_invoice_max !== undefined) {
+        qb.andWhere('project.balance_due_against_invoice <= :balance_due_against_invoice_max', {
+          balance_due_against_invoice_max,
+        });
+      }
+
+      if (holdover_min !== undefined) {
+        qb.andWhere('project.holdover >= :holdover_min', { holdover_min });
+      }
+
+      if (holdover_max !== undefined) {
+        qb.andWhere('project.holdover <= :holdover_max', { holdover_max });
+      }
+
+      if (security_min !== undefined) {
+        qb.andWhere('project.security >= :security_min', { security_min });
+      }
+
+      if (security_max !== undefined) {
+        qb.andWhere('project.security <= :security_max', { security_max });
+      }
+
+      const sortFieldMap: Record<string, string> = {
+        project_name: 'project.project_name',
+        project_code: 'project.project_code',
+        status: 'project.status',
+        currency: 'project.currency',
+        stipulated_comencement_date: 'project.stipulated_comencement_date',
+        actual_comencement_date: 'project.actual_comencement_date',
+        stipulated_completion_date: 'project.stipulated_completion_date',
+        actual_completion_date: 'project.actual_completion_date',
+        initial_contract_value: 'project.initial_contract_value',
+        completion_contract_value: 'project.completion_contract_value',
+        balance_due_against_invoice: 'project.balance_due_against_invoice',
+        holdover: 'project.holdover',
+        security: 'project.security',
+        created_at: 'project.created_at',
+        updated_at: 'project.updated_at',
+      };
+
+      const sortBy =
+        sort_by && sortFieldMap[sort_by] ? sortFieldMap[sort_by] : 'project.project_name';
+      const sortOrder = sort_order === 'DESC' ? 'DESC' : 'ASC';
+      qb.orderBy(sortBy, sortOrder);
+
+      const offset = filters.offset ?? 0;
+      const limit = filters.limit ?? 10;
+      const safeLimit = Math.min(Math.max(limit, 1), 100);
+      qb.skip(offset).take(safeLimit);
+
+      const projects = await qb.getMany();
       return projects.map((project) => this.mapToResponseDto(project));
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
@@ -231,7 +395,7 @@ export class ProjectsService {
         throw new NotFoundException(`Project with ID ${projectId} not found`);
       }
 
-      await this.ensureReadAccess(project.company_id, userId, userRoles);
+      await this.ensureTenderReadAccess(project.tender_id, userId, userRoles);
 
       return this.mapToResponseDto(project);
     } catch (error) {
@@ -265,7 +429,7 @@ export class ProjectsService {
         throw new NotFoundException(`Project with ID ${projectId} not found`);
       }
 
-      await this.ensureWriteAccess(project.company_id, userId, userRoles);
+      await this.ensureTenderWriteAccess(project.tender_id, userId, userRoles);
 
       const updatableFields: (keyof UpdateProjectDto)[] = [
         'project_code',
@@ -434,7 +598,7 @@ export class ProjectsService {
         throw new NotFoundException(`Project with ID ${projectId} not found`);
       }
 
-      await this.ensureWriteAccess(project.company_id, userId, userRoles);
+      await this.ensureTenderWriteAccess(project.tender_id, userId, userRoles);
 
       project.deleted_at = new Date();
       const savedProject = await queryRunner.manager.save(Project, project);
@@ -467,11 +631,7 @@ export class ProjectsService {
     return Array.isArray(userRoles) ? userRoles : [];
   }
 
-  private async ensureReadAccess(
-    companyId: string,
-    userId: string,
-    userRoles: string[],
-  ): Promise<void> {
+  private async getAccessibleTenderIds(userId: string, userRoles: string[]): Promise<string[]> {
     const normalizedRoles = this.normalizeRoles(userRoles);
     const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
 
@@ -490,35 +650,50 @@ export class ProjectsService {
         throw new ForbiddenException('Company group is not active');
       }
 
-      const company = await this.companyRepository.findOne({
-        where: {
-          id: companyId,
-          company_group_id: companyGroup.id,
-          deleted_at: IsNull(),
-        },
+      const companies = await this.companyRepository.find({
+        where: { company_group_id: companyGroup.id, deleted_at: IsNull() },
+        select: ['id'],
       });
 
-      if (!company) {
-        throw new NotFoundException('Project not found or access denied');
+      if (companies.length === 0) {
+        return [];
       }
 
-      return;
+      const companyIds = companies.map((company) => company.id);
+
+      const tenders = await this.tenderRepository.find({
+        where: { company_id: In(companyIds), deleted_at: IsNull() },
+        select: ['id'],
+      });
+
+      return tenders.map((tender) => tender.id);
     }
 
-    const company = await this.companyRepository.findOne({
-      where: { id: companyId, company_admin_user_id: userId, deleted_at: IsNull() },
+    const companies = await this.companyRepository.find({
+      where: { company_admin_user_id: userId, deleted_at: IsNull() },
+      select: ['id'],
     });
 
-    if (!company) {
-      throw new NotFoundException('Project not found or access denied');
+    if (companies.length === 0) {
+      throw new NotFoundException('Company not found for the authenticated company admin');
     }
+
+    const companyIds = companies.map((company) => company.id);
+
+    const tenders = await this.tenderRepository.find({
+      where: { company_id: In(companyIds), deleted_at: IsNull() },
+      select: ['id'],
+    });
+
+    return tenders.map((tender) => tender.id);
   }
 
-  private async ensureWriteAccess(
-    companyId: string,
+  private async ensureTenderReadAccess(
+    tenderId: string,
     userId: string,
     userRoles: string[],
-  ): Promise<void> {
+  ): Promise<Tender> {
+    const { tender, company } = await this.getTenderAndCompany(tenderId);
     const normalizedRoles = this.normalizeRoles(userRoles);
     const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
 
@@ -537,28 +712,78 @@ export class ProjectsService {
         throw new ForbiddenException('Company group is not active');
       }
 
-      const company = await this.companyRepository.findOne({
-        where: {
-          id: companyId,
-          company_group_id: companyGroup.id,
-          deleted_at: IsNull(),
-        },
+      if (company.company_group_id !== companyGroup.id) {
+        throw new NotFoundException('Tender not found or access denied');
+      }
+
+      return tender;
+    }
+
+    if (company.company_admin_user_id !== userId) {
+      throw new NotFoundException('Tender not found or access denied');
+    }
+
+    return tender;
+  }
+
+  private async ensureTenderWriteAccess(
+    tenderId: string,
+    userId: string,
+    userRoles: string[],
+  ): Promise<Tender> {
+    const { tender, company } = await this.getTenderAndCompany(tenderId);
+    const normalizedRoles = this.normalizeRoles(userRoles);
+    const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+
+    if (isGroupAdmin) {
+      const companyGroup = await this.companyGroupRepository.findOne({
+        where: { super_admin_id: userId },
       });
 
-      if (!company) {
+      if (!companyGroup) {
+        throw new NotFoundException(
+          'Company group not found. User is not a super admin of any company group.',
+        );
+      }
+
+      if (!companyGroup.is_active) {
+        throw new ForbiddenException('Company group is not active');
+      }
+
+      if (company.company_group_id !== companyGroup.id) {
         throw new ForbiddenException('Access denied to modify this project');
       }
 
-      return;
+      return tender;
+    }
+
+    if (company.company_admin_user_id !== userId) {
+      throw new ForbiddenException('Access denied to modify this project');
+    }
+
+    return tender;
+  }
+
+  private async getTenderAndCompany(
+    tenderId: string,
+  ): Promise<{ tender: Tender; company: Company }> {
+    const tender = await this.tenderRepository.findOne({
+      where: { id: tenderId, deleted_at: IsNull() },
+    });
+
+    if (!tender) {
+      throw new NotFoundException(`Tender with ID ${tenderId} not found`);
     }
 
     const company = await this.companyRepository.findOne({
-      where: { id: companyId, company_admin_user_id: userId, deleted_at: IsNull() },
+      where: { id: tender.company_id, deleted_at: IsNull() },
     });
 
     if (!company) {
-      throw new ForbiddenException('Access denied to modify this project');
+      throw new NotFoundException('Company not found for the tender');
     }
+
+    return { tender, company };
   }
 
   private toDate(value?: string): Date | null {
@@ -590,7 +815,7 @@ export class ProjectsService {
   private mapToResponseDto(project: Project): ProjectResponseDto {
     return {
       id: project.id,
-      company_id: project.company_id,
+      tender_id: project.tender_id,
       project_code: project.project_code,
       project_name: project.project_name,
       work_order_number_date: project.work_order_number_date || undefined,

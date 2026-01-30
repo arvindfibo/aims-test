@@ -12,12 +12,24 @@ import { User } from './user.entity';
 import { Company } from './company.entity';
 
 export enum TenderStatus {
+  NOT_FILLED = 'Not Filled',
+  ON_GOING = 'On Going',
+  L1 = 'L-1',
+  L1_WORK_ALLOTED = 'L-1(work alloted to Us)',
+  L2 = 'L-2',
+  L3 = 'L-3',
   QUOTED = 'Quoted',
-  ONGOING = 'Ongoing',
   SUBMITTED = 'Submitted',
   WON = 'Won',
   LOST = 'Lost',
   CANCELLED = 'Cancelled',
+}
+
+export enum EmdStatus {
+  PENDING = 'Pending',
+  PAID = 'Paid',
+  RETURNED = 'Returned',
+  NOT_APPLICABLE = 'Not Applicable',
 }
 
 export enum Currency {
@@ -87,20 +99,20 @@ export class Tender {
   @Column({ type: 'enum', enum: Currency, default: Currency.INR })
   total_tender_value_currency: Currency;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  last_date_of_submission: string | null;
+  @Column({ type: 'timestamp', nullable: true })
+  last_date_of_submission: Date | null;
 
   @Column({ type: 'text', nullable: true })
   mode_of_emd: string | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  tender_status: string | null;
+  @Column({ type: 'enum', enum: TenderStatus, nullable: true })
+  tender_status: TenderStatus | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  emd_status: string | null;
+  @Column({ type: 'enum', enum: EmdStatus, nullable: true })
+  emd_status: EmdStatus | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  emd_returned: string | null;
+  @Column({ type: 'boolean', default: false })
+  emd_returned: boolean;
 
   @Column({ type: 'uuid', nullable: true })
   created_by: string | null;

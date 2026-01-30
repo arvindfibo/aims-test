@@ -23,11 +23,11 @@ export enum ProjectCurrency {
 
 export class CreateProjectDto {
   @ApiProperty({
-    description: 'Company ID',
+    description: 'Tender ID',
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
-  @IsUUID('4', { message: 'Company ID must be a valid UUID' })
-  company_id: string;
+  @IsUUID('4', { message: 'Tender ID must be a valid UUID' })
+  tender_id: string;
 
   @ApiProperty({
     description: 'Project code',
@@ -218,10 +218,10 @@ export class ProjectResponseDto {
   id: string;
 
   @ApiProperty({
-    description: 'Company ID',
+    description: 'Tender ID',
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
-  company_id: string;
+  tender_id: string;
 
   @ApiProperty({
     description: 'Project code',

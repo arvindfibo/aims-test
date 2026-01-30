@@ -14,6 +14,7 @@ import { CompanyGroup } from '../entities/company-group.entity';
 import { CreateCompanyDto, CompanyResponseDto, CompanyType } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { DeleteCompanyResponseDto } from './dto/delete-company.dto';
+import { GetCompaniesQueryDto } from './dto/get-companies-query.dto';
 
 @Injectable()
 export class CompaniesService {
@@ -164,7 +165,10 @@ export class CompaniesService {
     }
   }
 
-  async findAllByGroupAdmin(userId: string): Promise<CompanyResponseDto[]> {
+  async findAllByGroupAdmin(
+    userId: string,
+    filters: GetCompaniesQueryDto = {} as GetCompaniesQueryDto,
+  ): Promise<CompanyResponseDto[]> {
     try {
       // Find the company group where user is the super admin
       const companyGroup = await this.companyGroupRepository.findOne({
@@ -181,15 +185,179 @@ export class CompaniesService {
         throw new ForbiddenException('Company group is not active');
       }
 
-      const companies = await this.companyRepository.find({
-        where: {
-          company_group_id: companyGroup.id,
-          deleted_at: IsNull(),
-        },
-        order: {
-          created_at: 'DESC',
-        },
-      });
+      if (filters.company_group_id && filters.company_group_id !== companyGroup.id) {
+        return [];
+      }
+
+      const {
+        id,
+        name,
+        legal_name,
+        company_type,
+        registration_number,
+        pan,
+        gstin,
+        email,
+        website,
+        phone,
+        address_line1,
+        address_line2,
+        city,
+        state,
+        country,
+        pincode,
+        company_admin_user_id,
+        is_active,
+        is_verified,
+        created_by,
+        updated_by,
+        created_at_from,
+        created_at_to,
+        updated_at_from,
+        updated_at_to,
+        sort_by,
+        sort_order,
+        offset,
+        limit,
+      } = filters;
+
+      const qb = this.companyRepository.createQueryBuilder('company');
+      qb.where('company.company_group_id = :companyGroupId', { companyGroupId: companyGroup.id });
+      qb.andWhere('company.deleted_at IS NULL');
+
+      if (id) {
+        qb.andWhere('company.id = :id', { id });
+      }
+
+      if (name) {
+        qb.andWhere('company.name = :name', { name });
+      }
+
+      if (legal_name) {
+        qb.andWhere('company.legal_name = :legal_name', { legal_name });
+      }
+
+      if (company_type) {
+        qb.andWhere('company.company_type = :company_type', { company_type });
+      }
+
+      if (registration_number) {
+        qb.andWhere('company.registration_number = :registration_number', {
+          registration_number,
+        });
+      }
+
+      if (pan) {
+        qb.andWhere('company.pan = :pan', { pan });
+      }
+
+      if (gstin) {
+        qb.andWhere('company.gstin = :gstin', { gstin });
+      }
+
+      if (email) {
+        qb.andWhere('company.email = :email', { email });
+      }
+
+      if (website) {
+        qb.andWhere('company.website = :website', { website });
+      }
+
+      if (phone) {
+        qb.andWhere('company.phone = :phone', { phone });
+      }
+
+      if (address_line1) {
+        qb.andWhere('company.address_line1 = :address_line1', { address_line1 });
+      }
+
+      if (address_line2) {
+        qb.andWhere('company.address_line2 = :address_line2', { address_line2 });
+      }
+
+      if (city) {
+        qb.andWhere('company.city = :city', { city });
+      }
+
+      if (state) {
+        qb.andWhere('company.state = :state', { state });
+      }
+
+      if (country) {
+        qb.andWhere('company.country = :country', { country });
+      }
+
+      if (pincode) {
+        qb.andWhere('company.pincode = :pincode', { pincode });
+      }
+
+      if (company_admin_user_id) {
+        qb.andWhere('company.company_admin_user_id = :company_admin_user_id', {
+          company_admin_user_id,
+        });
+      }
+
+      if (typeof is_active === 'boolean') {
+        qb.andWhere('company.is_active = :is_active', { is_active });
+      }
+
+      if (typeof is_verified === 'boolean') {
+        qb.andWhere('company.is_verified = :is_verified', { is_verified });
+      }
+
+      if (created_by) {
+        qb.andWhere('company.created_by = :created_by', { created_by });
+      }
+
+      if (updated_by) {
+        qb.andWhere('company.updated_by = :updated_by', { updated_by });
+      }
+
+      if (created_at_from) {
+        qb.andWhere('company.created_at >= :created_at_from', { created_at_from });
+      }
+
+      if (created_at_to) {
+        qb.andWhere('company.created_at <= :created_at_to', { created_at_to });
+      }
+
+      if (updated_at_from) {
+        qb.andWhere('company.updated_at >= :updated_at_from', { updated_at_from });
+      }
+
+      if (updated_at_to) {
+        qb.andWhere('company.updated_at <= :updated_at_to', { updated_at_to });
+      }
+
+      const sortFieldMap: Record<string, string> = {
+        name: 'company.name',
+        legal_name: 'company.legal_name',
+        company_type: 'company.company_type',
+        registration_number: 'company.registration_number',
+        pan: 'company.pan',
+        gstin: 'company.gstin',
+        email: 'company.email',
+        website: 'company.website',
+        phone: 'company.phone',
+        city: 'company.city',
+        state: 'company.state',
+        country: 'company.country',
+        pincode: 'company.pincode',
+        is_active: 'company.is_active',
+        is_verified: 'company.is_verified',
+        created_at: 'company.created_at',
+        updated_at: 'company.updated_at',
+      };
+
+      const sortBy =
+        sort_by && sortFieldMap[sort_by] ? sortFieldMap[sort_by] : 'company.created_at';
+      const sortOrder = sort_order === 'ASC' ? 'ASC' : 'DESC';
+      qb.orderBy(sortBy, sortOrder);
+
+      const safeLimit = Math.min(Math.max(limit ?? 10, 1), 100);
+      qb.skip(offset ?? 0).take(safeLimit);
+
+      const companies = await qb.getMany();
 
       this.logger.log(
         `Found ${companies.length} companies for group admin ${userId} in company group ${companyGroup.id}`,
