@@ -14,10 +14,15 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { ProjectsService } from './projects.service';
-import { CreateProjectDto, ProjectResponseDto } from './dto/create-project.dto';
+import {
+  CreateProjectDto,
+  ProjectResponseDto,
+  ProjectCurrency,
+  ProjectStatus,
+} from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { DeleteProjectResponseDto } from './dto/delete-project.dto';
 import { GetProjectsQueryDto } from './dto/get-projects-query.dto';
@@ -86,6 +91,250 @@ export class ProjectsController {
   @Get()
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN', 'COMPANY_ADMIN')
+  @ApiQuery({
+    name: 'tender_id',
+    required: false,
+    description: 'Filter by tender ID',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'id',
+    required: false,
+    description: 'Filter by project ID',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Filter by status',
+    enum: ProjectStatus,
+  })
+  @ApiQuery({
+    name: 'currency',
+    required: false,
+    description: 'Filter by currency',
+    enum: ProjectCurrency,
+  })
+  @ApiQuery({
+    name: 'project_code',
+    required: false,
+    description: 'Filter by project code (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'project_name',
+    required: false,
+    description: 'Filter by project name (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'work_order_number_date',
+    required: false,
+    description: 'Filter by work order number/date (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'name_of_work',
+    required: false,
+    description: 'Filter by name of work (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'project_manager',
+    required: false,
+    description: 'Filter by project manager (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'remarks',
+    required: false,
+    description: 'Filter by remarks (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'client_representative_name',
+    required: false,
+    description: 'Filter by client representative name (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'client_representative_phone',
+    required: false,
+    description: 'Filter by client representative phone (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'stipulated_comencement_date_from',
+    required: false,
+    description: 'Stipulated commencement date from (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'stipulated_comencement_date_to',
+    required: false,
+    description: 'Stipulated commencement date to (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'actual_comencement_date_from',
+    required: false,
+    description: 'Actual commencement date from (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'actual_comencement_date_to',
+    required: false,
+    description: 'Actual commencement date to (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'stipulated_completion_date_from',
+    required: false,
+    description: 'Stipulated completion date from (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'stipulated_completion_date_to',
+    required: false,
+    description: 'Stipulated completion date to (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'actual_completion_date_from',
+    required: false,
+    description: 'Actual completion date from (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'actual_completion_date_to',
+    required: false,
+    description: 'Actual completion date to (YYYY-MM-DD)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'created_at_from',
+    required: false,
+    description: 'Created at from (ISO datetime)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'created_at_to',
+    required: false,
+    description: 'Created at to (ISO datetime)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'updated_at_from',
+    required: false,
+    description: 'Updated at from (ISO datetime)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'updated_at_to',
+    required: false,
+    description: 'Updated at to (ISO datetime)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'initial_contract_value_min',
+    required: false,
+    description: 'Initial contract value min',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'initial_contract_value_max',
+    required: false,
+    description: 'Initial contract value max',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'completion_contract_value_min',
+    required: false,
+    description: 'Completion contract value min',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'completion_contract_value_max',
+    required: false,
+    description: 'Completion contract value max',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'balance_due_against_invoice_min',
+    required: false,
+    description: 'Balance due against invoice min',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'balance_due_against_invoice_max',
+    required: false,
+    description: 'Balance due against invoice max',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'holdover_min',
+    required: false,
+    description: 'Holdover min',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'holdover_max',
+    required: false,
+    description: 'Holdover max',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'security_min',
+    required: false,
+    description: 'Security min',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'security_max',
+    required: false,
+    description: 'Security max',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'sort_by',
+    required: false,
+    description: 'Sort by field',
+    enum: [
+      'project_name',
+      'project_code',
+      'status',
+      'currency',
+      'stipulated_comencement_date',
+      'actual_comencement_date',
+      'stipulated_completion_date',
+      'actual_completion_date',
+      'initial_contract_value',
+      'completion_contract_value',
+      'balance_due_against_invoice',
+      'holdover',
+      'security',
+      'created_at',
+      'updated_at',
+    ],
+  })
+  @ApiQuery({
+    name: 'sort_order',
+    required: false,
+    description: 'Sort order',
+    enum: ['ASC', 'DESC'],
+  })
+  @ApiQuery({
+    name: 'offset',
+    required: false,
+    description: 'Offset for pagination',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Limit for pagination (max 100)',
+    type: Number,
+  })
   @ApiOperation({
     summary: 'Get all projects',
     description:
