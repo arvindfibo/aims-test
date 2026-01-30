@@ -1,7 +1,7 @@
 import { BaseSeeder } from './base-seeder';
 
 interface RoleQueryResult {
-  id: number;
+  id: string;
 }
 
 export class RoleSeeder extends BaseSeeder {

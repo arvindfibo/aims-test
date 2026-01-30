@@ -19,8 +19,8 @@ export class UserRole {
   @Column({ type: 'uuid' })
   user_id: string;
 
-  @Column({ type: 'integer' })
-  role_id: number;
+  @Column({ type: 'uuid' })
+  role_id: string;
 
   @Column({ type: 'uuid', nullable: true })
   company_id: string | null;

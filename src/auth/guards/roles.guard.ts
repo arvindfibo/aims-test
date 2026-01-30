@@ -51,7 +51,7 @@ export class RolesGuard implements CanActivate {
     // Get user roles from database using TypeORM repository
     // This query matches the database schema:
     // - user_roles.user_id (uuid) -> users.id
-    // - user_roles.role_id (integer) -> roles.id
+    // - user_roles.role_id (uuid) -> roles.id
     // - user_roles.deleted_at IS NULL (soft delete check)
     const userRoles = await this.userRoleRepository.find({
       where: {
