@@ -13,6 +13,8 @@ import { Company } from '../entities/company.entity';
 import { CreateTenderDto, TenderResponseDto } from './dto/create-tender.dto';
 import { UpdateTenderDto } from './dto/update-tender.dto';
 import { DeleteTenderResponseDto } from './dto/delete-tender.dto';
+import { GetTendersQueryDto } from './dto/get-tenders-query.dto';
+import { PaginatedTendersResponseDto } from './dto/paginated-tenders-response.dto';
 
 @Injectable()
 export class TendersService {
@@ -114,20 +116,183 @@ export class TendersService {
     }
   }
 
-  async findAll(companyId?: string): Promise<TenderResponseDto[]> {
+  async findAll(
+    filters: GetTendersQueryDto = {} as GetTendersQueryDto,
+  ): Promise<PaginatedTendersResponseDto> {
     try {
-      const where: { company_id?: string } = {};
-      if (companyId) {
-        where.company_id = companyId;
+      const {
+        id,
+        company_id,
+        tender_code,
+        authority,
+        client_name,
+        nit_number,
+        name_of_work,
+        tender_status,
+        emd_status,
+        emd_returned,
+        tender_cost_currency,
+        processing_fee_currency,
+        emd_currency,
+        bank_charges_currency,
+        documentation_charges_currency,
+        total_tender_value_currency,
+        created_by,
+        updated_by,
+        last_date_of_submission_from,
+        last_date_of_submission_to,
+        created_at_from,
+        created_at_to,
+        updated_at_from,
+        updated_at_to,
+        sort_by,
+        sort_order,
+        offset,
+        limit,
+      } = filters;
+
+      const qb = this.tenderRepository.createQueryBuilder('tender');
+      qb.leftJoinAndSelect('tender.company', 'company');
+      qb.where('tender.deleted_at IS NULL');
+
+      // Apply filters dynamically
+      if (id) {
+        qb.andWhere('tender.id = :id', { id });
+      }
+      if (company_id) {
+        qb.andWhere('tender.company_id = :company_id', { company_id });
+      }
+      if (tender_code) {
+        qb.andWhere('tender.tender_code = :tender_code', { tender_code });
+      }
+      if (authority) {
+        qb.andWhere('tender.authority = :authority', { authority });
+      }
+      if (client_name) {
+        qb.andWhere('tender.client_name = :client_name', { client_name });
+      }
+      if (nit_number) {
+        qb.andWhere('tender.nit_number = :nit_number', { nit_number });
+      }
+      if (name_of_work) {
+        qb.andWhere('tender.name_of_work = :name_of_work', { name_of_work });
+      }
+      if (tender_status) {
+        qb.andWhere('tender.tender_status = :tender_status', { tender_status });
+      }
+      if (emd_status) {
+        qb.andWhere('tender.emd_status = :emd_status', { emd_status });
+      }
+      if (emd_returned !== undefined) {
+        qb.andWhere('tender.emd_returned = :emd_returned', { emd_returned });
+      }
+      if (tender_cost_currency) {
+        qb.andWhere('tender.tender_cost_currency = :tender_cost_currency', {
+          tender_cost_currency,
+        });
+      }
+      if (processing_fee_currency) {
+        qb.andWhere('tender.processing_fee_currency = :processing_fee_currency', {
+          processing_fee_currency,
+        });
+      }
+      if (emd_currency) {
+        qb.andWhere('tender.emd_currency = :emd_currency', { emd_currency });
+      }
+      if (bank_charges_currency) {
+        qb.andWhere('tender.bank_charges_currency = :bank_charges_currency', {
+          bank_charges_currency,
+        });
+      }
+      if (documentation_charges_currency) {
+        qb.andWhere('tender.documentation_charges_currency = :documentation_charges_currency', {
+          documentation_charges_currency,
+        });
+      }
+      if (total_tender_value_currency) {
+        qb.andWhere('tender.total_tender_value_currency = :total_tender_value_currency', {
+          total_tender_value_currency,
+        });
+      }
+      if (created_by) {
+        qb.andWhere('tender.created_by = :created_by', { created_by });
+      }
+      if (updated_by) {
+        qb.andWhere('tender.updated_by = :updated_by', { updated_by });
+      }
+      if (last_date_of_submission_from) {
+        qb.andWhere('tender.last_date_of_submission >= :last_date_of_submission_from', {
+          last_date_of_submission_from,
+        });
+      }
+      if (last_date_of_submission_to) {
+        qb.andWhere('tender.last_date_of_submission <= :last_date_of_submission_to', {
+          last_date_of_submission_to,
+        });
+      }
+      if (created_at_from) {
+        qb.andWhere('tender.created_at >= :created_at_from', { created_at_from });
+      }
+      if (created_at_to) {
+        qb.andWhere('tender.created_at <= :created_at_to', { created_at_to });
+      }
+      if (updated_at_from) {
+        qb.andWhere('tender.updated_at >= :updated_at_from', { updated_at_from });
+      }
+      if (updated_at_to) {
+        qb.andWhere('tender.updated_at <= :updated_at_to', { updated_at_to });
       }
 
-      const tenders = await this.tenderRepository.find({
-        where,
-        relations: ['company'],
-        order: { created_at: 'DESC' },
-      });
+      // Get total count before applying ordering and pagination
+      const total = await qb.getCount();
 
-      return tenders.map((tender) => this.mapToResponseDto(tender));
+      // Apply sorting
+      const sortFieldMap: Record<string, string> = {
+        tender_code: 'tender.tender_code',
+        authority: 'tender.authority',
+        client_name: 'tender.client_name',
+        nit_number: 'tender.nit_number',
+        name_of_work: 'tender.name_of_work',
+        tender_status: 'tender.tender_status',
+        emd_status: 'tender.emd_status',
+        emd_returned: 'tender.emd_returned',
+        tender_cost: 'tender.tender_cost',
+        processing_fee: 'tender.processing_fee',
+        emd: 'tender.emd',
+        bank_charges: 'tender.bank_charges',
+        documentation_charges: 'tender.documentation_charges',
+        total_tender_value: 'tender.total_tender_value',
+        last_date_of_submission: 'tender.last_date_of_submission',
+        created_at: 'tender.created_at',
+        updated_at: 'tender.updated_at',
+      };
+
+      const sortBy = sort_by && sortFieldMap[sort_by] ? sortFieldMap[sort_by] : 'tender.created_at';
+      const sortOrder = sort_order === 'ASC' ? 'ASC' : 'DESC';
+      qb.orderBy(sortBy, sortOrder);
+
+      // Apply pagination
+      const safeLimit = Math.min(Math.max(limit ?? 10, 1), 100);
+      const safeOffset = Math.max(offset ?? 0, 0);
+      qb.skip(safeOffset).take(safeLimit);
+
+      const tenders = await qb.getMany();
+
+      const hasMore = safeOffset + tenders.length < total;
+
+      this.logger.log(
+        `Found ${tenders.length} tenders (offset: ${safeOffset}, limit: ${safeLimit}, total: ${total}, sortBy: ${sortBy}, sortOrder: ${sortOrder})`,
+      );
+
+      return {
+        data: tenders.map((tender) => this.mapToResponseDto(tender)),
+        pagination: {
+          total,
+          offset: safeOffset,
+          limit: safeLimit,
+          hasMore,
+        },
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : undefined;

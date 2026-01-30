@@ -20,6 +20,8 @@ import { TendersService } from './tenders.service';
 import { CreateTenderDto, TenderResponseDto } from './dto/create-tender.dto';
 import { UpdateTenderDto } from './dto/update-tender.dto';
 import { DeleteTenderResponseDto } from './dto/delete-tender.dto';
+import { GetTendersQueryDto } from './dto/get-tenders-query.dto';
+import { PaginatedTendersResponseDto } from './dto/paginated-tenders-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
@@ -85,28 +87,173 @@ export class TendersController {
   }
 
   @Get()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Get all tenders',
+    summary: 'Get all tenders with pagination, filtering, and sorting',
     description:
-      'Retrieves all tenders. Optionally filter by company_id. Users with COMPANY_ADMIN or GROUP_ADMIN roles can access this endpoint.',
+      'Returns paginated tenders with support for filtering by all tender fields, sorting by multiple fields, and offset-based pagination. Default: 10 items per page, sorted by created_at DESC. Users with COMPANY_ADMIN or GROUP_ADMIN roles can access this endpoint.',
+  })
+  @ApiQuery({ name: 'id', required: false, description: 'Filter by tender ID' })
+  @ApiQuery({ name: 'company_id', required: false, description: 'Filter by company ID' })
+  @ApiQuery({ name: 'tender_code', required: false, description: 'Filter by tender code' })
+  @ApiQuery({ name: 'authority', required: false, description: 'Filter by authority' })
+  @ApiQuery({ name: 'client_name', required: false, description: 'Filter by client name' })
+  @ApiQuery({ name: 'nit_number', required: false, description: 'Filter by NIT number' })
+  @ApiQuery({ name: 'name_of_work', required: false, description: 'Filter by name of work' })
+  @ApiQuery({
+    name: 'tender_status',
+    required: false,
+    description: 'Filter by tender status',
+    enum: [
+      'Not Filled',
+      'On Going',
+      'L-1',
+      'L-1(work alloted to Us)',
+      'L-2',
+      'L-3',
+      'Quoted',
+      'Submitted',
+      'Won',
+      'Lost',
+      'Cancelled',
+    ],
   })
   @ApiQuery({
-    name: 'company_id',
+    name: 'emd_status',
     required: false,
-    description: 'Filter tenders by company ID',
-    type: String,
+    description: 'Filter by EMD status',
+    enum: ['Pending', 'Paid', 'Returned', 'Not Applicable'],
+  })
+  @ApiQuery({
+    name: 'emd_returned',
+    required: false,
+    description: 'Filter by EMD returned',
+    type: Boolean,
+  })
+  @ApiQuery({
+    name: 'tender_cost_currency',
+    required: false,
+    description: 'Filter by tender cost currency',
+    enum: ['INR', 'USD'],
+  })
+  @ApiQuery({
+    name: 'processing_fee_currency',
+    required: false,
+    description: 'Filter by processing fee currency',
+    enum: ['INR', 'USD'],
+  })
+  @ApiQuery({
+    name: 'emd_currency',
+    required: false,
+    description: 'Filter by EMD currency',
+    enum: ['INR', 'USD'],
+  })
+  @ApiQuery({
+    name: 'bank_charges_currency',
+    required: false,
+    description: 'Filter by bank charges currency',
+    enum: ['INR', 'USD'],
+  })
+  @ApiQuery({
+    name: 'documentation_charges_currency',
+    required: false,
+    description: 'Filter by documentation charges currency',
+    enum: ['INR', 'USD'],
+  })
+  @ApiQuery({
+    name: 'total_tender_value_currency',
+    required: false,
+    description: 'Filter by total tender value currency',
+    enum: ['INR', 'USD'],
+  })
+  @ApiQuery({ name: 'created_by', required: false, description: 'Filter by created_by user ID' })
+  @ApiQuery({ name: 'updated_by', required: false, description: 'Filter by updated_by user ID' })
+  @ApiQuery({
+    name: 'last_date_of_submission_from',
+    required: false,
+    description: 'Filter by last date of submission from (ISO datetime)',
+  })
+  @ApiQuery({
+    name: 'last_date_of_submission_to',
+    required: false,
+    description: 'Filter by last date of submission to (ISO datetime)',
+  })
+  @ApiQuery({
+    name: 'created_at_from',
+    required: false,
+    description: 'Filter by created_at from (ISO datetime)',
+  })
+  @ApiQuery({
+    name: 'created_at_to',
+    required: false,
+    description: 'Filter by created_at to (ISO datetime)',
+  })
+  @ApiQuery({
+    name: 'updated_at_from',
+    required: false,
+    description: 'Filter by updated_at from (ISO datetime)',
+  })
+  @ApiQuery({
+    name: 'updated_at_to',
+    required: false,
+    description: 'Filter by updated_at to (ISO datetime)',
+  })
+  @ApiQuery({
+    name: 'sort_by',
+    required: false,
+    description: 'Sort by field',
+    enum: [
+      'tender_code',
+      'authority',
+      'client_name',
+      'nit_number',
+      'name_of_work',
+      'tender_status',
+      'emd_status',
+      'emd_returned',
+      'tender_cost',
+      'processing_fee',
+      'emd',
+      'bank_charges',
+      'documentation_charges',
+      'total_tender_value',
+      'last_date_of_submission',
+      'created_at',
+      'updated_at',
+    ],
+  })
+  @ApiQuery({
+    name: 'sort_order',
+    required: false,
+    description: 'Sort order',
+    enum: ['ASC', 'DESC'],
+  })
+  @ApiQuery({
+    name: 'offset',
+    required: false,
+    description: 'Offset for pagination',
+    type: Number,
+    example: 0,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Limit for pagination (max 100)',
+    type: Number,
+    example: 10,
   })
   @ApiResponse({
     status: 200,
-    description: 'List of tenders retrieved successfully',
-    type: [TenderResponseDto],
+    description: 'Paginated list of tenders retrieved successfully',
+    type: PaginatedTendersResponseDto,
   })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized - invalid or missing JWT token',
   })
-  async findAll(@Query('company_id') companyId?: string): Promise<TenderResponseDto[]> {
-    return this.tendersService.findAll(companyId);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async findAll(@Query() query: GetTendersQueryDto): Promise<PaginatedTendersResponseDto> {
+    return this.tendersService.findAll(query);
   }
 
   @Get(':id')

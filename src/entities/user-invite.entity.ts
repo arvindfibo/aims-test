@@ -14,9 +14,9 @@ import { Company } from './company.entity';
 @Entity('user_invites')
 export class UserInvite {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id: string; //uuid
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255 }) //email
   email: string;
 
   @Column({ type: 'uuid' })
@@ -29,8 +29,7 @@ export class UserInvite {
   invite_token: string;
 
   @Column({ type: 'varchar', length: 50, default: 'pending' })
-  invite_status: string; // 'pending', 'accepted', 'expired'
-
+  invite_status: string;
   @Column({ type: 'timestamp', nullable: true })
   expires_at: Date | null;
 
