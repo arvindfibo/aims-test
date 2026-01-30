@@ -1,15 +1,37 @@
 import { MigrationInterface, QueryRunner, TableColumn, TableForeignKey } from 'typeorm';
 
+interface ForeignKeyConstraint {
+  table_name: string;
+  constraint_name: string;
+}
+
+interface PrimaryKeyConstraint {
+  constraint_name: string;
+}
+
 export class ChangeRoleIdToUuid1769720045173 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Step 1: Drop foreign key constraint from user_roles to roles
-    const userRolesTable = await queryRunner.getTable('user_roles');
-    const foreignKey = userRolesTable?.foreignKeys.find(
-      (fk) => fk.columnNames.indexOf('role_id') !== -1 && fk.referencedTableName === 'roles',
-    );
+    // Step 1: Drop ALL foreign key constraints that reference roles table
+    // First, find all tables that have foreign keys to roles
+    const tablesWithFkToRoles = (await queryRunner.query(`
+      SELECT 
+        tc.table_name,
+        tc.constraint_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND ccu.table_name = 'roles'
+        AND ccu.column_name = 'id'
+    `)) as ForeignKeyConstraint[];
 
-    if (foreignKey) {
-      await queryRunner.dropForeignKey('user_roles', foreignKey);
+    // Drop all foreign key constraints found
+    for (const fk of tablesWithFkToRoles) {
+      await queryRunner.query(
+        `ALTER TABLE "${fk.table_name}" DROP CONSTRAINT IF EXISTS "${fk.constraint_name}" CASCADE`,
+      );
     }
 
     // Step 2: Add temporary UUID column to roles table
@@ -58,11 +80,28 @@ export class ChangeRoleIdToUuid1769720045173 implements MigrationInterface {
     `);
 
     // Step 7: Drop primary key constraint before dropping the column
-    await queryRunner.query(`ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_pkey`);
+    // Find the actual constraint name and drop it with CASCADE
+    const primaryKeyConstraint = (await queryRunner.query(`
+      SELECT constraint_name
+      FROM information_schema.table_constraints
+      WHERE table_name = 'roles'
+        AND constraint_type = 'PRIMARY KEY'
+    `)) as PrimaryKeyConstraint[];
 
-    // Step 8: Drop old integer columns
-    await queryRunner.dropColumn('roles', 'id');
-    await queryRunner.dropColumn('user_roles', 'role_id');
+    if (primaryKeyConstraint.length > 0) {
+      const constraintName = primaryKeyConstraint[0]?.constraint_name;
+      if (constraintName) {
+        await queryRunner.query(
+          `ALTER TABLE roles DROP CONSTRAINT IF EXISTS "${constraintName}" CASCADE`,
+        );
+      }
+    }
+    // If no primary key found, it might already be dropped - that's okay
+
+    // Step 8: Drop old integer columns using raw SQL
+    // We use raw SQL because dropColumn tries to drop constraints that we already handled
+    await queryRunner.query(`ALTER TABLE roles DROP COLUMN IF EXISTS id`);
+    await queryRunner.query(`ALTER TABLE user_roles DROP COLUMN IF EXISTS role_id`);
 
     // Step 9: Rename new UUID columns to original names
     await queryRunner.renameColumn('roles', 'id_new', 'id');
@@ -93,14 +132,26 @@ export class ChangeRoleIdToUuid1769720045173 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    // Step 1: Drop foreign key constraint
-    const userRolesTable = await queryRunner.getTable('user_roles');
-    const foreignKey = userRolesTable?.foreignKeys.find(
-      (fk) => fk.columnNames.indexOf('role_id') !== -1 && fk.referencedTableName === 'roles',
-    );
+    // Step 1: Drop ALL foreign key constraints that reference roles table
+    const tablesWithFkToRoles = (await queryRunner.query(`
+      SELECT 
+        tc.table_name,
+        tc.constraint_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND ccu.table_name = 'roles'
+        AND ccu.column_name = 'id'
+    `)) as ForeignKeyConstraint[];
 
-    if (foreignKey) {
-      await queryRunner.dropForeignKey('user_roles', foreignKey);
+    // Drop all foreign key constraints found
+    for (const fk of tablesWithFkToRoles) {
+      await queryRunner.query(
+        `ALTER TABLE "${fk.table_name}" DROP CONSTRAINT IF EXISTS "${fk.constraint_name}" CASCADE`,
+      );
     }
 
     // Step 2: Add temporary integer column to roles
@@ -148,11 +199,27 @@ export class ChangeRoleIdToUuid1769720045173 implements MigrationInterface {
     `);
 
     // Step 7: Drop primary key constraint before dropping the column
-    await queryRunner.query(`ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_pkey`);
+    const primaryKeyConstraint = (await queryRunner.query(`
+      SELECT constraint_name
+      FROM information_schema.table_constraints
+      WHERE table_name = 'roles'
+        AND constraint_type = 'PRIMARY KEY'
+    `)) as PrimaryKeyConstraint[];
 
-    // Step 8: Drop UUID columns
-    await queryRunner.dropColumn('roles', 'id');
-    await queryRunner.dropColumn('user_roles', 'role_id');
+    if (primaryKeyConstraint.length > 0) {
+      const constraintName = primaryKeyConstraint[0]?.constraint_name;
+      if (constraintName) {
+        await queryRunner.query(
+          `ALTER TABLE roles DROP CONSTRAINT IF EXISTS "${constraintName}" CASCADE`,
+        );
+      }
+    }
+    // If no primary key found, it might already be dropped - that's okay
+
+    // Step 8: Drop UUID columns using raw SQL
+    // We use raw SQL because dropColumn tries to drop constraints that we already handled
+    await queryRunner.query(`ALTER TABLE roles DROP COLUMN IF EXISTS id`);
+    await queryRunner.query(`ALTER TABLE user_roles DROP COLUMN IF EXISTS role_id`);
 
     // Step 9: Rename old columns back
     await queryRunner.renameColumn('roles', 'id_old', 'id');

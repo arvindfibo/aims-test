@@ -10,7 +10,7 @@ const config: DataSourceOptions = {
   url: process.env.DATABASE_URL,
   entities: [__dirname + '/../**/*.entity.{ts,js}'],
   migrations: [__dirname + '/../migrations/*.{ts,js}'],
-  synchronize: process.env.NODE_ENV !== 'production',
+  synchronize: false, // Disabled - use migrations instead for schema changes
   logging: process.env.NODE_ENV === 'development',
   ssl:
     process.env.DATABASE_URL?.includes('sslmode=require') ||
