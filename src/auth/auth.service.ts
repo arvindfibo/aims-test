@@ -5,6 +5,8 @@ import {
   Logger,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -128,31 +130,34 @@ export class AuthService {
       });
 
       if (!groupAdminRole) {
-        this.logger.warn('GROUP_ADMIN role not found. Please run seeders first.');
-      } else {
-        // Verify no duplicate role assignment exists
-        const existingUserRole = await queryRunner.manager.findOne(UserRole, {
-          where: {
-            user_id: savedUser.id,
-            role_id: groupAdminRole.id,
-            company_id: IsNull(),
-          },
+        this.logger.error('GROUP_ADMIN role not found. Please run seeders first: pnpm seed:role');
+        throw new InternalServerErrorException(
+          'GROUP_ADMIN role not found. Please contact administrator to seed roles.',
+        );
+      }
+
+      // Verify no duplicate role assignment exists
+      const existingUserRole = await queryRunner.manager.findOne(UserRole, {
+        where: {
+          user_id: savedUser.id,
+          role_id: groupAdminRole.id,
+          company_id: IsNull(),
+        },
+      });
+
+      if (!existingUserRole) {
+        const userRole = queryRunner.manager.create(UserRole, {
+          user_id: savedUser.id,
+          role_id: groupAdminRole.id,
+          company_id: null, // GROUP_ADMIN is at company group level, not company level
         });
 
-        if (!existingUserRole) {
-          const userRole = queryRunner.manager.create(UserRole, {
-            user_id: savedUser.id,
-            role_id: groupAdminRole.id,
-            company_id: null, // GROUP_ADMIN is at company group level, not company level
-          });
-
-          await queryRunner.manager.save(UserRole, userRole);
-          this.logger.log(
-            `Assigned GROUP_ADMIN role to user ${savedUser.email} for company group ${savedCompanyGroup.name}`,
-          );
-        } else {
-          this.logger.warn(`User ${savedUser.email} already has GROUP_ADMIN role assigned`);
-        }
+        await queryRunner.manager.save(UserRole, userRole);
+        this.logger.log(
+          `Assigned GROUP_ADMIN role to user ${savedUser.email} for company group ${savedCompanyGroup.name}`,
+        );
+      } else {
+        this.logger.warn(`User ${savedUser.email} already has GROUP_ADMIN role assigned`);
       }
 
       await queryRunner.commitTransaction();
@@ -546,6 +551,97 @@ export class AuthService {
       }
 
       throw new InternalServerErrorException('An error occurred during password reset');
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Assign GROUP_ADMIN role to a user who is super_admin of a company group
+   * This is a utility method to fix users who signed up before roles were seeded
+   * @param userId - User ID
+   * @returns Success message
+   */
+  async assignGroupAdminRoleToSuperAdmin(userId: string): Promise<{ message: string }> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Verify user exists
+      const user = await queryRunner.manager.findOne(User, {
+        where: { id: userId, deleted_at: IsNull() },
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+
+      // Verify user is super_admin of at least one company group
+      const companyGroup = await queryRunner.manager.findOne(CompanyGroup, {
+        where: { super_admin_id: userId, deleted_at: IsNull() },
+      });
+
+      if (!companyGroup) {
+        throw new ForbiddenException('User is not a super admin of any company group');
+      }
+
+      // Get GROUP_ADMIN role
+      const groupAdminRole = await queryRunner.manager.findOne(Role, {
+        where: { name: 'GROUP_ADMIN' },
+      });
+
+      if (!groupAdminRole) {
+        throw new NotFoundException(
+          'GROUP_ADMIN role not found. Please run seeders first: pnpm seed:role',
+        );
+      }
+
+      // Check if role already assigned
+      const existingUserRole = await queryRunner.manager.findOne(UserRole, {
+        where: {
+          user_id: userId,
+          role_id: groupAdminRole.id,
+          company_id: IsNull(),
+          deleted_at: IsNull(),
+        },
+      });
+
+      if (existingUserRole) {
+        await queryRunner.rollbackTransaction();
+        return {
+          message: `User ${user.email} already has GROUP_ADMIN role assigned`,
+        };
+      }
+
+      // Assign role
+      const userRole = queryRunner.manager.create(UserRole, {
+        user_id: userId,
+        role_id: groupAdminRole.id,
+        company_id: null, // GROUP_ADMIN is at company group level
+      });
+
+      await queryRunner.manager.save(UserRole, userRole);
+      await queryRunner.commitTransaction();
+
+      this.logger.log(
+        `Assigned GROUP_ADMIN role to user ${user.email} (super admin of ${companyGroup.name})`,
+      );
+
+      return {
+        message: `GROUP_ADMIN role assigned successfully to ${user.email}`,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to assign GROUP_ADMIN role: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new InternalServerErrorException('Failed to assign GROUP_ADMIN role');
     } finally {
       await queryRunner.release();
     }

@@ -5,9 +5,18 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { CompaniesModule } from './companies/companies.module';
 import { RolesModule } from './roles/roles.module';
+import { UserInvitesModule } from './user-invites/user-invites.module';
+import { CompanyGroupsModule } from './company-groups/company-groups.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, CompaniesModule, RolesModule],
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    CompaniesModule,
+    RolesModule,
+    UserInvitesModule,
+    CompanyGroupsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -179,7 +179,8 @@ export class CreateCompanyDto {
   pincode?: string;
 
   @ApiPropertyOptional({
-    description: 'Company admin user ID',
+    description:
+      'Company admin user ID. Optional - can be set later when inviting users. If not provided, company admin can be assigned via user invitations.',
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
   @IsOptional()
