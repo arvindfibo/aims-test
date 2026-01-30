@@ -9,6 +9,7 @@ import { RolesModule } from './roles/roles.module';
 import { UserInvitesModule } from './user-invites/user-invites.module';
 import { CompanyGroupsModule } from './company-groups/company-groups.module';
 import { TendersModule } from './tenders/tenders.module';
+import { DivisionsModule } from './divisions/divisions.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TendersModule } from './tenders/tenders.module';
     CompanyGroupsModule,
     ProjectsModule,
     TendersModule,
+    DivisionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
