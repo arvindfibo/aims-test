@@ -8,7 +8,7 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
 } from 'typeorm';
-import { Company } from './company.entity';
+import { Tender } from './tender.entity';
 
 @Entity('projects')
 export class Project {
@@ -16,7 +16,7 @@ export class Project {
   id: string;
 
   @Column({ type: 'uuid' })
-  company_id: string;
+  tender_id: string;
 
   @Column({ type: 'varchar', length: 100 })
   project_code: string;
@@ -92,7 +92,7 @@ export class Project {
   @DeleteDateColumn()
   deleted_at: Date | null;
 
-  @ManyToOne(() => Company)
-  @JoinColumn({ name: 'company_id' })
-  company: Company;
+  @ManyToOne(() => Tender)
+  @JoinColumn({ name: 'tender_id' })
+  tender: Tender;
 }

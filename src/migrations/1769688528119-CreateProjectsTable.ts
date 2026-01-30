@@ -16,7 +16,7 @@ export class CreateProjectsTable1769688528119 implements MigrationInterface {
             default: 'gen_random_uuid()',
           },
           {
-            name: 'company_id',
+            name: 'tender_id',
             type: 'uuid',
             isNullable: false,
           },
@@ -158,8 +158,8 @@ export class CreateProjectsTable1769688528119 implements MigrationInterface {
         ],
         indices: [
           {
-            name: 'IDX_projects_company_id',
-            columnNames: ['company_id'],
+            name: 'IDX_projects_tender_id',
+            columnNames: ['tender_id'],
           },
           {
             name: 'IDX_projects_project_code',
@@ -172,8 +172,8 @@ export class CreateProjectsTable1769688528119 implements MigrationInterface {
         ],
         foreignKeys: [
           {
-            columnNames: ['company_id'],
-            referencedTableName: 'companies',
+            columnNames: ['tender_id'],
+            referencedTableName: 'tenders',
             referencedColumnNames: ['id'],
             onDelete: 'RESTRICT',
             onUpdate: 'CASCADE',

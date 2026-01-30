@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In, IsNull } from 'typeorm';
 import { Project } from '../entities/project.entity';
+import { Tender } from '../entities/tender.entity';
 import { Company } from '../entities/company.entity';
 import { CompanyGroup } from '../entities/company-group.entity';
 import {
@@ -27,6 +28,8 @@ export class ProjectsService {
   constructor(
     @InjectRepository(Project)
     private readonly projectRepository: Repository<Project>,
+    @InjectRepository(Tender)
+    private readonly tenderRepository: Repository<Tender>,
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
     @InjectRepository(CompanyGroup)
@@ -44,55 +47,14 @@ export class ProjectsService {
     await queryRunner.startTransaction();
 
     try {
-      const normalizedRoles = this.normalizeRoles(userRoles);
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
-
-      let company: Company | null = null;
-
-      if (isGroupAdmin) {
-        const companyGroup = await queryRunner.manager.findOne(CompanyGroup, {
-          where: { super_admin_id: userId },
-        });
-
-        if (!companyGroup) {
-          throw new NotFoundException(
-            'Company group not found. User is not a super admin of any company group.',
-          );
-        }
-
-        if (!companyGroup.is_active) {
-          throw new ForbiddenException('Company group is not active');
-        }
-
-        company = await queryRunner.manager.findOne(Company, {
-          where: {
-            id: createProjectDto.company_id,
-            company_group_id: companyGroup.id,
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (!company) {
-          throw new NotFoundException(
-            `Company with ID ${createProjectDto.company_id} not found in your company group`,
-          );
-        }
-      } else {
-        company = await queryRunner.manager.findOne(Company, {
-          where: {
-            id: createProjectDto.company_id,
-            company_admin_user_id: userId,
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (!company) {
-          throw new ForbiddenException('Access denied to create a project for this company');
-        }
-      }
+      const tender = await this.ensureTenderWriteAccess(
+        createProjectDto.tender_id,
+        userId,
+        userRoles,
+      );
 
       const project = this.projectRepository.create({
-        company_id: company.id,
+        tender_id: tender.id,
         project_code: createProjectDto.project_code,
         project_name: createProjectDto.project_name,
         work_order_number_date: createProjectDto.work_order_number_date || null,
@@ -149,60 +111,33 @@ export class ProjectsService {
     }
   }
 
-  async findAll(userId: string, userRoles: string[] = []): Promise<ProjectResponseDto[]> {
+  async findAll(
+    tenderId: string | undefined,
+    userId: string,
+    userRoles: string[] = [],
+  ): Promise<ProjectResponseDto[]> {
     try {
-      const normalizedRoles = this.normalizeRoles(userRoles);
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+      let projects: Project[] = [];
 
-      if (isGroupAdmin) {
-        const companyGroup = await this.companyGroupRepository.findOne({
-          where: { super_admin_id: userId },
+      if (tenderId) {
+        await this.ensureTenderReadAccess(tenderId, userId, userRoles);
+
+        projects = await this.projectRepository.find({
+          where: { tender_id: tenderId, deleted_at: IsNull() },
+          order: { project_name: 'ASC' },
         });
+      } else {
+        const tenderIds = await this.getAccessibleTenderIds(userId, userRoles);
 
-        if (!companyGroup) {
-          throw new NotFoundException(
-            'Company group not found. User is not a super admin of any company group.',
-          );
-        }
-
-        if (!companyGroup.is_active) {
-          throw new ForbiddenException('Company group is not active');
-        }
-
-        const companies = await this.companyRepository.find({
-          where: { company_group_id: companyGroup.id, deleted_at: IsNull() },
-          select: ['id'],
-        });
-
-        if (companies.length === 0) {
+        if (tenderIds.length === 0) {
           return [];
         }
 
-        const companyIds = companies.map((company) => company.id);
-
-        const projects = await this.projectRepository.find({
-          where: { company_id: In(companyIds), deleted_at: IsNull() },
+        projects = await this.projectRepository.find({
+          where: { tender_id: In(tenderIds), deleted_at: IsNull() },
           order: { project_name: 'ASC' },
         });
-
-        return projects.map((project) => this.mapToResponseDto(project));
       }
-
-      const companies = await this.companyRepository.find({
-        where: { company_admin_user_id: userId, deleted_at: IsNull() },
-        select: ['id'],
-      });
-
-      if (companies.length === 0) {
-        throw new NotFoundException('Company not found for the authenticated company admin');
-      }
-
-      const companyIds = companies.map((company) => company.id);
-
-      const projects = await this.projectRepository.find({
-        where: { company_id: In(companyIds), deleted_at: IsNull() },
-        order: { project_name: 'ASC' },
-      });
 
       return projects.map((project) => this.mapToResponseDto(project));
     } catch (error) {
@@ -231,7 +166,7 @@ export class ProjectsService {
         throw new NotFoundException(`Project with ID ${projectId} not found`);
       }
 
-      await this.ensureReadAccess(project.company_id, userId, userRoles);
+      await this.ensureTenderReadAccess(project.tender_id, userId, userRoles);
 
       return this.mapToResponseDto(project);
     } catch (error) {
@@ -265,7 +200,7 @@ export class ProjectsService {
         throw new NotFoundException(`Project with ID ${projectId} not found`);
       }
 
-      await this.ensureWriteAccess(project.company_id, userId, userRoles);
+      await this.ensureTenderWriteAccess(project.tender_id, userId, userRoles);
 
       const updatableFields: (keyof UpdateProjectDto)[] = [
         'project_code',
@@ -434,7 +369,7 @@ export class ProjectsService {
         throw new NotFoundException(`Project with ID ${projectId} not found`);
       }
 
-      await this.ensureWriteAccess(project.company_id, userId, userRoles);
+      await this.ensureTenderWriteAccess(project.tender_id, userId, userRoles);
 
       project.deleted_at = new Date();
       const savedProject = await queryRunner.manager.save(Project, project);
@@ -467,11 +402,7 @@ export class ProjectsService {
     return Array.isArray(userRoles) ? userRoles : [];
   }
 
-  private async ensureReadAccess(
-    companyId: string,
-    userId: string,
-    userRoles: string[],
-  ): Promise<void> {
+  private async getAccessibleTenderIds(userId: string, userRoles: string[]): Promise<string[]> {
     const normalizedRoles = this.normalizeRoles(userRoles);
     const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
 
@@ -490,35 +421,50 @@ export class ProjectsService {
         throw new ForbiddenException('Company group is not active');
       }
 
-      const company = await this.companyRepository.findOne({
-        where: {
-          id: companyId,
-          company_group_id: companyGroup.id,
-          deleted_at: IsNull(),
-        },
+      const companies = await this.companyRepository.find({
+        where: { company_group_id: companyGroup.id, deleted_at: IsNull() },
+        select: ['id'],
       });
 
-      if (!company) {
-        throw new NotFoundException('Project not found or access denied');
+      if (companies.length === 0) {
+        return [];
       }
 
-      return;
+      const companyIds = companies.map((company) => company.id);
+
+      const tenders = await this.tenderRepository.find({
+        where: { company_id: In(companyIds), deleted_at: IsNull() },
+        select: ['id'],
+      });
+
+      return tenders.map((tender) => tender.id);
     }
 
-    const company = await this.companyRepository.findOne({
-      where: { id: companyId, company_admin_user_id: userId, deleted_at: IsNull() },
+    const companies = await this.companyRepository.find({
+      where: { company_admin_user_id: userId, deleted_at: IsNull() },
+      select: ['id'],
     });
 
-    if (!company) {
-      throw new NotFoundException('Project not found or access denied');
+    if (companies.length === 0) {
+      throw new NotFoundException('Company not found for the authenticated company admin');
     }
+
+    const companyIds = companies.map((company) => company.id);
+
+    const tenders = await this.tenderRepository.find({
+      where: { company_id: In(companyIds), deleted_at: IsNull() },
+      select: ['id'],
+    });
+
+    return tenders.map((tender) => tender.id);
   }
 
-  private async ensureWriteAccess(
-    companyId: string,
+  private async ensureTenderReadAccess(
+    tenderId: string,
     userId: string,
     userRoles: string[],
-  ): Promise<void> {
+  ): Promise<Tender> {
+    const { tender, company } = await this.getTenderAndCompany(tenderId);
     const normalizedRoles = this.normalizeRoles(userRoles);
     const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
 
@@ -537,28 +483,78 @@ export class ProjectsService {
         throw new ForbiddenException('Company group is not active');
       }
 
-      const company = await this.companyRepository.findOne({
-        where: {
-          id: companyId,
-          company_group_id: companyGroup.id,
-          deleted_at: IsNull(),
-        },
+      if (company.company_group_id !== companyGroup.id) {
+        throw new NotFoundException('Tender not found or access denied');
+      }
+
+      return tender;
+    }
+
+    if (company.company_admin_user_id !== userId) {
+      throw new NotFoundException('Tender not found or access denied');
+    }
+
+    return tender;
+  }
+
+  private async ensureTenderWriteAccess(
+    tenderId: string,
+    userId: string,
+    userRoles: string[],
+  ): Promise<Tender> {
+    const { tender, company } = await this.getTenderAndCompany(tenderId);
+    const normalizedRoles = this.normalizeRoles(userRoles);
+    const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+
+    if (isGroupAdmin) {
+      const companyGroup = await this.companyGroupRepository.findOne({
+        where: { super_admin_id: userId },
       });
 
-      if (!company) {
+      if (!companyGroup) {
+        throw new NotFoundException(
+          'Company group not found. User is not a super admin of any company group.',
+        );
+      }
+
+      if (!companyGroup.is_active) {
+        throw new ForbiddenException('Company group is not active');
+      }
+
+      if (company.company_group_id !== companyGroup.id) {
         throw new ForbiddenException('Access denied to modify this project');
       }
 
-      return;
+      return tender;
+    }
+
+    if (company.company_admin_user_id !== userId) {
+      throw new ForbiddenException('Access denied to modify this project');
+    }
+
+    return tender;
+  }
+
+  private async getTenderAndCompany(
+    tenderId: string,
+  ): Promise<{ tender: Tender; company: Company }> {
+    const tender = await this.tenderRepository.findOne({
+      where: { id: tenderId, deleted_at: IsNull() },
+    });
+
+    if (!tender) {
+      throw new NotFoundException(`Tender with ID ${tenderId} not found`);
     }
 
     const company = await this.companyRepository.findOne({
-      where: { id: companyId, company_admin_user_id: userId, deleted_at: IsNull() },
+      where: { id: tender.company_id, deleted_at: IsNull() },
     });
 
     if (!company) {
-      throw new ForbiddenException('Access denied to modify this project');
+      throw new NotFoundException('Company not found for the tender');
     }
+
+    return { tender, company };
   }
 
   private toDate(value?: string): Date | null {
@@ -590,7 +586,7 @@ export class ProjectsService {
   private mapToResponseDto(project: Project): ProjectResponseDto {
     return {
       id: project.id,
-      company_id: project.company_id,
+      tender_id: project.tender_id,
       project_code: project.project_code,
       project_name: project.project_name,
       work_order_number_date: project.work_order_number_date || undefined,

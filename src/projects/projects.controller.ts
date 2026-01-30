@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   HttpCode,
@@ -13,7 +14,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto, ProjectResponseDto } from './dto/create-project.dto';
@@ -50,7 +51,7 @@ export class ProjectsController {
   @ApiOperation({
     summary: 'Create a new project',
     description:
-      'Creates a project for a company. GROUP_ADMIN can create for any company in their group. COMPANY_ADMIN can create for their company only.',
+      'Creates a project under a tender. GROUP_ADMIN can create for any tender in their group. COMPANY_ADMIN can create for tenders under their company.',
   })
   @ApiResponse({
     status: 201,
@@ -87,7 +88,13 @@ export class ProjectsController {
   @ApiOperation({
     summary: 'Get all projects',
     description:
-      'Returns all projects accessible to the authenticated admin. GROUP_ADMIN sees projects for all companies in their group. COMPANY_ADMIN sees projects for their company.',
+      'Returns all projects. Optionally filter by tender_id. Access is limited to GROUP_ADMIN (within group) and COMPANY_ADMIN (within their company).',
+  })
+  @ApiQuery({
+    name: 'tender_id',
+    required: false,
+    description: 'Filter projects by tender ID',
+    type: String,
   })
   @ApiResponse({
     status: 200,
@@ -106,8 +113,11 @@ export class ProjectsController {
     status: 404,
     description: 'Company or company group not found',
   })
-  async findAll(@Request() req: AuthenticatedRequest): Promise<ProjectResponseDto[]> {
-    return this.projectsService.findAll(req.user.id, req.userRoles);
+  async findAll(
+    @Query('tender_id') tenderId: string | undefined,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ProjectResponseDto[]> {
+    return this.projectsService.findAll(tenderId, req.user.id, req.userRoles);
   }
 
   @Get(':id')
