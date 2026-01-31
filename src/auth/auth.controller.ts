@@ -1,0 +1,524 @@
+import {
+  Controller,
+  Post,
+  Body,
+  Request,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiInternalServerErrorResponse,
+  ApiUnauthorizedResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import { AuthService } from './auth.service';
+import { SignupDto, SignupResponseDto } from './dto/signup.dto';
+import { VerifyEmailDto, VerifyEmailResponseDto } from './dto/verify-email.dto';
+import { LoginDto, LoginResponseDto } from './dto/login.dto';
+import { ResendOtpDto, ResendOtpResponseDto } from './dto/resend-otp.dto';
+import {
+  ForgotPasswordDto,
+  ForgotPasswordResponseDto,
+  ResetPasswordDto,
+  ResetPasswordResponseDto,
+} from './dto/forgot-password.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import type { Request as ExpressRequest } from 'express';
+
+@ApiTags('auth')
+@Controller('auth')
+export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('signup')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'User signup with company group creation',
+    description:
+      'Creates a new user account and company group in a single transaction. The user becomes the super admin of the created company group.',
+  })
+  @ApiBody({
+    type: SignupDto,
+    description: 'Signup request with user and company group information',
+    examples: {
+      example1: {
+        summary: 'Complete signup example',
+        value: {
+          email: 'john.doe@example.com',
+          phone: '+1234567890',
+          first_name: 'John',
+          last_name: 'Doe',
+          password: 'SecurePassword123!',
+          company_group: {
+            name: 'Acme Corporation',
+            code: 'ACME',
+            description: 'Leading technology company',
+          },
+        },
+      },
+      example2: {
+        summary: 'Minimal signup example',
+        value: {
+          email: 'jane@example.com',
+          first_name: 'Jane',
+          password: 'SecurePassword123!',
+          company_group: {
+            name: 'Tech Startup Inc',
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'User and company group created successfully',
+    type: SignupResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation error - Invalid input data',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'array',
+          items: { type: 'string' },
+          example: [
+            'email must be an email',
+            'password must be longer than or equal to 8 characters',
+          ],
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiConflictResponse({
+    description: 'Conflict - Email or company group already exists',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 409 },
+        message: {
+          type: 'string',
+          example: 'User with this email already exists',
+        },
+        error: { type: 'string', example: 'Conflict' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred during signup',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async signup(@Body(ValidationPipe) signupDto: SignupDto): Promise<SignupResponseDto> {
+    this.logger.log(`Signup attempt for email: ${signupDto.email}`);
+    return this.authService.signup(signupDto);
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify email with OTP and get JWT token',
+    description:
+      'Verifies the user email using the OTP code received via email. Returns a JWT token upon successful verification.',
+  })
+  @ApiBody({
+    type: VerifyEmailDto,
+    description: 'Email and OTP code for verification',
+    examples: {
+      example1: {
+        summary: 'Email verification example',
+        value: {
+          email: 'john.doe@example.com',
+          otp_code: '123456',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email verified successfully, JWT token returned',
+    type: VerifyEmailResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation error or email already verified',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'string',
+          example: 'Email is already verified',
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid email or OTP code',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Invalid or expired OTP code',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred during email verification',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async verifyEmail(
+    @Body(ValidationPipe) verifyEmailDto: VerifyEmailDto,
+  ): Promise<VerifyEmailResponseDto> {
+    this.logger.log(`Email verification attempt for: ${verifyEmailDto.email}`);
+    return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'User login with email and password',
+    description:
+      'Authenticates a user with email and password. Returns a JWT token upon successful authentication. User must be verified to login.',
+  })
+  @ApiBody({
+    type: LoginDto,
+    description: 'Email and password for authentication',
+    examples: {
+      example1: {
+        summary: 'Login example',
+        value: {
+          email: 'john.doe@example.com',
+          password: 'SecurePassword123!',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful, JWT token returned',
+    type: LoginResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation error - Invalid input data',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['email must be an email', 'password should not be empty'],
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid credentials, inactive account, or unverified email',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Invalid email or password',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred during login',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async login(@Body(ValidationPipe) loginDto: LoginDto): Promise<LoginResponseDto> {
+    this.logger.log(`Login attempt for email: ${loginDto.email}`);
+    return this.authService.login(loginDto);
+  }
+
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend email verification OTP',
+    description: 'Resends the email verification OTP to the user. Only works for unverified users.',
+  })
+  @ApiBody({
+    type: ResendOtpDto,
+    description: 'Email address to resend OTP',
+    examples: {
+      example1: {
+        summary: 'Resend OTP example',
+        value: {
+          email: 'john.doe@example.com',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP resent successfully',
+    type: ResendOtpResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Email already verified',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'string',
+          example: 'Email is already verified',
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred while resending OTP',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async resendOtp(@Body(ValidationPipe) resendOtpDto: ResendOtpDto): Promise<ResendOtpResponseDto> {
+    this.logger.log(`Resend OTP request for email: ${resendOtpDto.email}`);
+    return this.authService.resendOtp(resendOtpDto);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Request password reset OTP',
+    description:
+      'Sends a password reset OTP to the user email address. Works for verified users only.',
+  })
+  @ApiBody({
+    type: ForgotPasswordDto,
+    description: 'Email address for password reset',
+    examples: {
+      example1: {
+        summary: 'Forgot password example',
+        value: {
+          email: 'john.doe@example.com',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset OTP sent successfully',
+    type: ForgotPasswordResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Account is inactive',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Account is inactive. Please contact support.',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred while processing password reset',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async forgotPassword(
+    @Body(ValidationPipe) forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<ForgotPasswordResponseDto> {
+    this.logger.log(`Forgot password request for email: ${forgotPasswordDto.email}`);
+    return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reset password with OTP',
+    description:
+      'Resets the user password using the OTP code received via email. Requires email, OTP code, and new password.',
+  })
+  @ApiBody({
+    type: ResetPasswordDto,
+    description: 'Email, OTP code, and new password',
+    examples: {
+      example1: {
+        summary: 'Reset password example',
+        value: {
+          email: 'john.doe@example.com',
+          otp_code: '123456',
+          new_password: 'NewSecurePassword123!',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset successfully',
+    type: ResetPasswordResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'array',
+          items: { type: 'string' },
+          example: [
+            'otp_code must be exactly 6 digits',
+            'new_password must be longer than or equal to 8 characters',
+          ],
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid email or OTP code',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Invalid or expired OTP code',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 500 },
+        message: {
+          type: 'string',
+          example: 'An error occurred during password reset',
+        },
+        error: { type: 'string', example: 'Internal Server Error' },
+      },
+    },
+  })
+  async resetPassword(
+    @Body(ValidationPipe) resetPasswordDto: ResetPasswordDto,
+  ): Promise<ResetPasswordResponseDto> {
+    this.logger.log(`Reset password request for email: ${resetPasswordDto.email}`);
+    return this.authService.resetPassword(resetPasswordDto);
+  }
+
+  @Post('fix-role-assignment')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Fix GROUP_ADMIN role assignment for super admin',
+    description:
+      'Utility endpoint to assign GROUP_ADMIN role to users who are super admins but missing the role. Requires authentication. Automatically uses the authenticated user ID.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Role assigned successfully or already assigned',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'GROUP_ADMIN role assigned successfully to user@example.com',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user is not a super admin of any company group',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'User or GROUP_ADMIN role not found',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error',
+  })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  async fixRoleAssignment(
+    @Request() req: ExpressRequest & { user: { id: string } },
+  ): Promise<{ message: string }> {
+    this.logger.log(`Fix role assignment request for user: ${req.user.id}`);
+    return this.authService.assignGroupAdminRoleToSuperAdmin(req.user.id);
+  }
+}
