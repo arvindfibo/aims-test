@@ -8,12 +8,14 @@ import { User } from '../entities/user.entity';
 import { Company } from '../entities/company.entity';
 import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
+import { Division } from '../entities/division.entity';
+import { Department } from '../entities/department.entity';
 import { AuthModule } from '../auth/auth.module';
 import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserInvite, User, Company, Role, UserRole]),
+    TypeOrmModule.forFeature([UserInvite, User, Company, Role, UserRole, Division, Department]),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
       signOptions: {

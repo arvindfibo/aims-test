@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   HttpCode,
@@ -12,7 +13,7 @@ import {
   ValidationPipe,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { UserInvitesService } from './user-invites.service';
 import { InviteUserDto, InviteUserResponseDto } from './dto/invite-user.dto';
@@ -23,6 +24,7 @@ import {
   RejectInvitationResponseDto,
 } from './dto/accept-reject-invitation.dto';
 import { CompanyUsersResponseDto } from './dto/company-users-response.dto';
+import { GetCompanyUsersQueryDto } from './dto/get-company-users-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -164,12 +166,27 @@ export class UserInvitesController {
   }
 
   @Get('company/:companyId/users')
-  @Roles('GROUP_ADMIN', 'COMPANY_ADMIN')
+  @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN', 'DEPARTMENT_ADMIN')
   @HttpCode(HttpStatus.OK)
+  @ApiQuery({
+    name: 'division_id',
+    required: false,
+    description: 'Optional filter by division ID. Returns only users assigned to this division.',
+    type: String,
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiQuery({
+    name: 'department_id',
+    required: false,
+    description:
+      'Optional filter by department ID. Returns only users assigned to this department. Requires division_id to be provided.',
+    type: String,
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Get all users of a company with invitation status and roles',
     description:
-      'Retrieves all users associated with a company, including their invitation status and assigned roles. Only GROUP_ADMIN and COMPANY_ADMIN can access this endpoint. COMPANY_ADMIN can only view users of their own company.',
+      'Retrieves all users associated with a company, including their invitation status and assigned roles. Supports optional filtering by division_id and department_id. GROUP_ADMIN can view any company users. COMPANY_ADMIN can view users of their own company. DIVISION_ADMIN can view users of their division. DEPARTMENT_ADMIN can view users of their department.',
   })
   @ApiResponse({
     status: 200,
@@ -186,7 +203,8 @@ export class UserInvitesController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - user does not have required role or cannot access this company',
+    description:
+      'Forbidden - user does not have required role or cannot access this company/division/department',
   })
   @ApiResponse({
     status: 404,
@@ -196,10 +214,18 @@ export class UserInvitesController {
     status: 500,
     description: 'Internal server error',
   })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async getCompanyUsers(
     @Param('companyId', ParseUUIDPipe) companyId: string,
+    @Query() query: GetCompanyUsersQueryDto,
     @Request() req: AuthenticatedRequest,
   ): Promise<CompanyUsersResponseDto> {
-    return this.userInvitesService.getCompanyUsers(companyId, req.user.id, req.userRoles);
+    return this.userInvitesService.getCompanyUsers(
+      companyId,
+      req.user.id,
+      req.userRoles,
+      query.division_id,
+      query.department_id,
+    );
   }
 }

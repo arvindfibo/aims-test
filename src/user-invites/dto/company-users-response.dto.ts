@@ -119,6 +119,34 @@ export class CompanyUsersResponseDto {
   company_name: string;
 
   @ApiProperty({
+    description: 'Division ID (if filtered by division)',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    nullable: true,
+  })
+  division_id: string | null;
+
+  @ApiProperty({
+    description: 'Division name (if filtered by division)',
+    example: 'Engineering Division',
+    nullable: true,
+  })
+  division_name: string | null;
+
+  @ApiProperty({
+    description: 'Department ID (if filtered by department)',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    nullable: true,
+  })
+  department_id: string | null;
+
+  @ApiProperty({
+    description: 'Department name (if filtered by department)',
+    example: 'Software Engineering',
+    nullable: true,
+  })
+  department_name: string | null;
+
+  @ApiProperty({
     description: 'Total number of users',
     example: 10,
   })
