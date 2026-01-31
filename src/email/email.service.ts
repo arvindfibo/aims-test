@@ -296,7 +296,7 @@ If you didn't request a password reset, please ignore this email. Your password 
       const senderEmail = process.env.BREVO_SENDER_EMAIL || 'noreply@example.com';
       const senderName = process.env.BREVO_SENDER_NAME || 'AIMS ERP';
       const appUrl = process.env.APP_URL || 'http://localhost:3000';
-      const inviteLink = `${appUrl}/accept-invite?token=${inviteToken}`;
+      const inviteLink = `${appUrl}/Invitation-accept?token=${inviteToken}`;
 
       this.logger.log(
         `Preparing user invitation email to ${email} from ${senderEmail} (${senderName})`,
