@@ -16,7 +16,7 @@ import { CreateDivisionDto, DivisionResponseDto } from './dto/create-division.dt
 import { UpdateDivisionDto } from './dto/update-division.dto';
 import { DeleteDivisionResponseDto } from './dto/delete-division.dto';
 import { ListDivisionsQueryDto } from './dto/list-divisions-query.dto';
-import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { PaginatedDivisionsResponseDto } from './dto/paginated-divisions-response.dto';
 
 @Injectable()
 export class DivisionsService {
@@ -161,7 +161,7 @@ export class DivisionsService {
   async findAllByCompany(
     companyId: string,
     query: ListDivisionsQueryDto,
-  ): Promise<PaginatedResponseDto<DivisionResponseDto>> {
+  ): Promise<PaginatedDivisionsResponseDto> {
     // Verify company exists
     const company = await this.companyRepository.findOne({
       where: { id: companyId, deleted_at: IsNull() },
@@ -171,10 +171,10 @@ export class DivisionsService {
       throw new NotFoundException(`Company with ID ${companyId} not found`);
     }
 
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const sortBy = query.sortBy ?? 'created_at';
-    const sortOrder = query.sortOrder ?? 'desc';
+    const safeOffset = Math.max(query.offset ?? 0, 0);
+    const safeLimit = Math.min(Math.max(query.limit ?? 10, 1), 100);
+    const sortBy = query.sort_by ?? 'created_at';
+    const sortOrder = query.sort_order === 'ASC' ? 'ASC' : 'DESC';
 
     const where: Record<string, unknown> = {
       company_id: companyId,
@@ -193,12 +193,22 @@ export class DivisionsService {
     const [divisions, total] = await this.divisionRepository.findAndCount({
       where,
       order: { [sortBy]: sortOrder },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip: safeOffset,
+      take: safeLimit,
     });
 
     const data = divisions.map((division) => this.mapToResponseDto(division));
-    return new PaginatedResponseDto(data, total, page, limit);
+    const hasMore = safeOffset + divisions.length < total;
+
+    return {
+      data,
+      pagination: {
+        total,
+        offset: safeOffset,
+        limit: safeLimit,
+        hasMore,
+      },
+    };
   }
 
   async update(

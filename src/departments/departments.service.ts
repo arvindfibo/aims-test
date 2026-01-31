@@ -16,7 +16,7 @@ import { CreateDepartmentDto, DepartmentResponseDto } from './dto/create-departm
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { DeleteDepartmentResponseDto } from './dto/delete-department.dto';
 import { ListDepartmentsQueryDto } from './dto/list-departments-query.dto';
-import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { PaginatedDepartmentsResponseDto } from './dto/paginated-departments-response.dto';
 
 @Injectable()
 export class DepartmentsService {
@@ -179,7 +179,7 @@ export class DepartmentsService {
   async findAllByDivision(
     divisionId: string,
     query: ListDepartmentsQueryDto,
-  ): Promise<PaginatedResponseDto<DepartmentResponseDto>> {
+  ): Promise<PaginatedDepartmentsResponseDto> {
     // Verify division exists
     const division = await this.divisionRepository.findOne({
       where: { id: divisionId, deleted_at: IsNull() },
@@ -189,10 +189,10 @@ export class DepartmentsService {
       throw new NotFoundException(`Division with ID ${divisionId} not found`);
     }
 
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const sortBy = query.sortBy ?? 'created_at';
-    const sortOrder = query.sortOrder ?? 'desc';
+    const safeOffset = Math.max(query.offset ?? 0, 0);
+    const safeLimit = Math.min(Math.max(query.limit ?? 10, 1), 100);
+    const sortBy = query.sort_by ?? 'created_at';
+    const sortOrder = query.sort_order === 'ASC' ? 'ASC' : 'DESC';
 
     const where: Record<string, unknown> = {
       division_id: divisionId,
@@ -211,12 +211,22 @@ export class DepartmentsService {
     const [departments, total] = await this.departmentRepository.findAndCount({
       where,
       order: { [sortBy]: sortOrder },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip: safeOffset,
+      take: safeLimit,
     });
 
     const data = departments.map((department) => this.mapToResponseDto(department));
-    return new PaginatedResponseDto(data, total, page, limit);
+    const hasMore = safeOffset + departments.length < total;
+
+    return {
+      data,
+      pagination: {
+        total,
+        offset: safeOffset,
+        limit: safeLimit,
+        hasMore,
+      },
+    };
   }
 
   async update(
