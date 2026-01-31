@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   HttpCode,
@@ -19,6 +20,8 @@ import { DivisionsService } from './divisions.service';
 import { CreateDivisionDto, DivisionResponseDto } from './dto/create-division.dto';
 import { UpdateDivisionDto } from './dto/update-division.dto';
 import { DeleteDivisionResponseDto } from './dto/delete-division.dto';
+import { ListDivisionsQueryDto } from './dto/list-divisions-query.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -91,12 +94,28 @@ export class DivisionsController {
   @ApiOperation({
     summary: 'Get all divisions for a company',
     description:
-      'Retrieves all divisions belonging to a specific company. User must have appropriate role.',
+      'Retrieves divisions for a company with pagination, sorting, and optional filters (name, code, is_active).',
   })
   @ApiResponse({
     status: 200,
-    description: 'Divisions retrieved successfully',
-    type: [DivisionResponseDto],
+    description: 'Divisions retrieved successfully (paginated)',
+    schema: {
+      type: 'object',
+      properties: {
+        data: { type: 'array', items: { $ref: '#/components/schemas/DivisionResponseDto' } },
+        meta: {
+          type: 'object',
+          properties: {
+            total: { type: 'number' },
+            page: { type: 'number' },
+            limit: { type: 'number' },
+            totalPages: { type: 'number' },
+            hasNextPage: { type: 'boolean' },
+            hasPreviousPage: { type: 'boolean' },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -110,8 +129,12 @@ export class DivisionsController {
     status: 404,
     description: 'Company not found',
   })
-  async findAllByCompany(@Param('companyId') companyId: string): Promise<DivisionResponseDto[]> {
-    return this.divisionsService.findAllByCompany(companyId);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async findAllByCompany(
+    @Param('companyId') companyId: string,
+    @Query() query: ListDivisionsQueryDto,
+  ): Promise<PaginatedResponseDto<DivisionResponseDto>> {
+    return this.divisionsService.findAllByCompany(companyId, query);
   }
 
   @Get(':id')

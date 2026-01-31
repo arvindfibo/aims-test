@@ -10,6 +10,7 @@ import { UserInvitesModule } from './user-invites/user-invites.module';
 import { CompanyGroupsModule } from './company-groups/company-groups.module';
 import { TendersModule } from './tenders/tenders.module';
 import { DivisionsModule } from './divisions/divisions.module';
+import { DepartmentsModule } from './departments/departments.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DivisionsModule } from './divisions/divisions.module';
     ProjectsModule,
     TendersModule,
     DivisionsModule,
+    DepartmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
