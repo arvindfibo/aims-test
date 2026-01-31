@@ -1,9 +1,23 @@
-import { Controller, Get, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
+  Query,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { CompanyGroupsService } from './company-groups.service';
 import { CompanyGroupResponseDto } from './dto/company-group-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { GetCompanyGroupUsersQueryDto } from './dto/get-company-group-users-query.dto';
+import { PaginatedCompanyGroupUsersResponseDto } from './dto/company-group-users-response.dto';
 
 interface AuthenticatedUser {
   id: string;
@@ -16,11 +30,12 @@ interface AuthenticatedUser {
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: AuthenticatedUser;
+  userRoles?: string[];
 }
 
 @ApiTags('Company Groups')
 @Controller('company-groups')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('JWT-auth')
 export class CompanyGroupsController {
   constructor(private readonly companyGroupsService: CompanyGroupsService) {}
@@ -48,5 +63,124 @@ export class CompanyGroupsController {
   async findAll(@Request() req: AuthenticatedRequest): Promise<CompanyGroupResponseDto[]> {
     // Extract super_admin_id from JWT token (user.id)
     return this.companyGroupsService.findAllBySuperAdmin(req.user.id);
+  }
+
+  @Get('users')
+  @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN', 'DEPARTMENT_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiQuery({
+    name: 'company_id',
+    required: false,
+    description: 'Filter by company ID',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'division_id',
+    required: false,
+    description: 'Filter by division ID',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'department_id',
+    required: false,
+    description: 'Filter by department ID',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'email',
+    required: false,
+    description: 'Filter by user email (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'first_name',
+    required: false,
+    description: 'Filter by user first name (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'last_name',
+    required: false,
+    description: 'Filter by user last name (exact match)',
+    type: String,
+  })
+  @ApiQuery({
+    name: 'is_active',
+    required: false,
+    description: 'Filter by user active status',
+    type: Boolean,
+  })
+  @ApiQuery({
+    name: 'is_verified',
+    required: false,
+    description: 'Filter by user verified status',
+    type: Boolean,
+  })
+  @ApiQuery({
+    name: 'sort_by',
+    required: false,
+    description: 'Sort by field',
+    enum: [
+      'created_at',
+      'updated_at',
+      'email',
+      'first_name',
+      'last_name',
+      'company_name',
+      'division_name',
+      'department_name',
+      'role_name',
+    ],
+  })
+  @ApiQuery({
+    name: 'sort_order',
+    required: false,
+    description: 'Sort order',
+    enum: ['ASC', 'DESC'],
+  })
+  @ApiQuery({
+    name: 'offset',
+    required: false,
+    description: 'Offset for pagination',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Limit for pagination (max 100)',
+    type: Number,
+  })
+  @ApiOperation({
+    summary: 'Get users across companies with scoped access',
+    description:
+      'Returns a flat list of user-role assignments across companies with filters, sorting, and pagination. Access is scoped by highest admin role: GROUP_ADMIN (group-wide), COMPANY_ADMIN (company-only), DIVISION_ADMIN (division-only), DEPARTMENT_ADMIN (department-only).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Users retrieved successfully',
+    type: PaginatedCompanyGroupUsersResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user does not have required role or scope',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Company group not found for the user',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error',
+  })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async getCompanyGroupUsers(
+    @Query() query: GetCompanyGroupUsersQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<PaginatedCompanyGroupUsersResponseDto> {
+    return this.companyGroupsService.getCompanyGroupUsers(req.user.id, req.userRoles ?? [], query);
   }
 }

@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, IsNull, In } from 'typeorm';
+import { Repository, DataSource, IsNull, In, FindOptionsWhere } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { UserInvite } from '../entities/user-invite.entity';
@@ -16,6 +16,8 @@ import { User } from '../entities/user.entity';
 import { Company } from '../entities/company.entity';
 import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
+import { Division } from '../entities/division.entity';
+import { Department } from '../entities/department.entity';
 import { InviteUserDto, InviteUserResponseDto } from './dto/invite-user.dto';
 import {
   AcceptInvitationDto,
@@ -44,6 +46,10 @@ export class UserInvitesService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Division)
+    private readonly divisionRepository: Repository<Division>,
+    @InjectRepository(Department)
+    private readonly departmentRepository: Repository<Department>,
     private readonly dataSource: DataSource,
     private readonly emailService: EmailService,
     private readonly jwtService: JwtService,
@@ -458,12 +464,16 @@ export class UserInvitesService {
    * @param companyId - Company ID
    * @param userId - Current user ID (for authorization)
    * @param userRoles - Current user roles (for authorization)
+   * @param divisionId - Optional division ID filter
+   * @param departmentId - Optional department ID filter
    * @returns List of users with invitation status and roles
    */
   async getCompanyUsers(
     companyId: string,
     userId: string,
     userRoles: string[] = [],
+    divisionId?: string,
+    departmentId?: string,
   ): Promise<CompanyUsersResponseDto> {
     try {
       // Verify company exists and is active
@@ -482,10 +492,67 @@ export class UserInvitesService {
         throw new BadRequestException('Company is inactive');
       }
 
-      // Authorization: COMPANY_ADMIN can only see users of their own company
-      // GROUP_ADMIN can see users of any company
-      if (userRoles.includes('COMPANY_ADMIN')) {
-        // Check if user is COMPANY_ADMIN of this specific company
+      // Validate division if provided
+      let division: Division | null = null;
+      if (divisionId) {
+        division = await this.divisionRepository.findOne({
+          where: {
+            id: divisionId,
+            company_id: companyId, // Ensure division belongs to the company
+            deleted_at: IsNull(),
+          },
+        });
+
+        if (!division) {
+          throw new NotFoundException(
+            `Division with ID ${divisionId} not found or does not belong to company ${companyId}`,
+          );
+        }
+
+        if (!division.is_active) {
+          throw new BadRequestException('Division is inactive');
+        }
+      }
+
+      // Validate department if provided
+      let department: Department | null = null;
+      if (departmentId) {
+        if (!divisionId) {
+          throw new BadRequestException('department_id requires division_id to be provided');
+        }
+
+        department = await this.departmentRepository.findOne({
+          where: {
+            id: departmentId,
+            division_id: divisionId, // Ensure department belongs to the division
+            deleted_at: IsNull(),
+          },
+        });
+
+        if (!department) {
+          throw new NotFoundException(
+            `Department with ID ${departmentId} not found or does not belong to division ${divisionId}`,
+          );
+        }
+
+        if (!department.is_active) {
+          throw new BadRequestException('Department is inactive');
+        }
+      }
+
+      // Authorization checks
+      const normalizedRoles = Array.isArray(userRoles) ? userRoles : [];
+      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+      const isCompanyAdmin = normalizedRoles.includes('COMPANY_ADMIN');
+      const isDivisionAdmin = normalizedRoles.includes('DIVISION_ADMIN');
+      const isDepartmentAdmin = normalizedRoles.includes('DEPARTMENT_ADMIN');
+
+      // GROUP_ADMIN can access any company/division/department
+      if (isGroupAdmin) {
+        // No additional checks needed - can filter by any division/department
+      } else if (isCompanyAdmin) {
+        // COMPANY_ADMIN can only see users of their own company
+        // They can filter by division/department within their company
         const userRole = await this.userRoleRepository.findOne({
           where: {
             user_id: userId,
@@ -498,16 +565,50 @@ export class UserInvitesService {
         if (!userRole || userRole.role?.name !== 'COMPANY_ADMIN') {
           throw new ForbiddenException('You can only view users of your own company');
         }
-      } else if (!userRoles.includes('GROUP_ADMIN')) {
-        throw new ForbiddenException('Only GROUP_ADMIN and COMPANY_ADMIN can view company users');
+      } else if (isDivisionAdmin && divisionId) {
+        // DIVISION_ADMIN can only see users of their own division
+        // They cannot filter by other divisions
+        if (!division || division.division_admin_user_id !== userId) {
+          throw new ForbiddenException('You can only view users of your own division');
+        }
+        // If department_id is provided, it must belong to their division
+        if (departmentId && department && department.division_id !== divisionId) {
+          throw new ForbiddenException('Department does not belong to your division');
+        }
+      } else if (isDepartmentAdmin && departmentId) {
+        // DEPARTMENT_ADMIN can only see users of their own department
+        if (!department || department.department_admin_user_id !== userId) {
+          throw new ForbiddenException('You can only view users of your own department');
+        }
+        // If division_id is provided, it must match the department's division
+        if (divisionId && department.division_id !== divisionId) {
+          throw new BadRequestException("Division ID does not match the department's division");
+        }
+      } else {
+        throw new ForbiddenException(
+          'Only GROUP_ADMIN, COMPANY_ADMIN, DIVISION_ADMIN, or DEPARTMENT_ADMIN can view users',
+        );
       }
 
-      // Get all users with roles for this company
+      // Build where clause for user_roles query
+      const userRolesWhere: FindOptionsWhere<UserRole> = {
+        company_id: companyId,
+        deleted_at: IsNull(),
+      };
+
+      // Add division filter if provided
+      if (divisionId) {
+        userRolesWhere.division_id = divisionId;
+      }
+
+      // Add department filter if provided
+      if (departmentId) {
+        userRolesWhere.department_id = departmentId;
+      }
+
+      // Get all users with roles for this company (and optionally division/department)
       const userRolesList = await this.userRoleRepository.find({
-        where: {
-          company_id: companyId,
-          deleted_at: IsNull(),
-        },
+        where: userRolesWhere,
         relations: ['user', 'role'],
         order: {
           created_at: 'ASC',
@@ -606,13 +707,24 @@ export class UserInvitesService {
 
       const companyUsers = Array.from(userMap.values());
 
-      this.logger.log(
-        `Retrieved ${companyUsers.length} users for company ${company.name} (${companyId})`,
-      );
+      // Build filter description for logging
+      let filterDescription = `company ${company.name} (${companyId})`;
+      if (division) {
+        filterDescription += `, division ${division.name} (${divisionId})`;
+      }
+      if (department) {
+        filterDescription += `, department ${department.name} (${departmentId})`;
+      }
+
+      this.logger.log(`Retrieved ${companyUsers.length} users for ${filterDescription}`);
 
       return {
         company_id: company.id,
         company_name: company.name,
+        division_id: division?.id || null,
+        division_name: division?.name || null,
+        department_id: department?.id || null,
+        department_name: department?.name || null,
         total_users: companyUsers.length,
         users: companyUsers,
       };
