@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 
-export class CreateTendersTable1769693033843 implements MigrationInterface {
-  name = 'CreateTendersTable1769693033843';
+export class CreateTendersTable1769673033843 implements MigrationInterface {
+  name = 'CreateTendersTable1769673033843';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create enum type for currency
