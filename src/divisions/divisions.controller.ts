@@ -14,14 +14,14 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { DivisionsService } from './divisions.service';
 import { CreateDivisionDto, DivisionResponseDto } from './dto/create-division.dto';
 import { UpdateDivisionDto } from './dto/update-division.dto';
 import { DeleteDivisionResponseDto } from './dto/delete-division.dto';
 import { ListDivisionsQueryDto } from './dto/list-divisions-query.dto';
-import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { PaginatedDivisionsResponseDto } from './dto/paginated-divisions-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -96,26 +96,52 @@ export class DivisionsController {
     description:
       'Retrieves divisions for a company with pagination, sorting, and optional filters (name, code, is_active).',
   })
+  @ApiQuery({
+    name: 'name',
+    required: false,
+    description: 'Filter by division name (partial, case-insensitive)',
+  })
+  @ApiQuery({
+    name: 'code',
+    required: false,
+    description: 'Filter by division code (partial, case-insensitive)',
+  })
+  @ApiQuery({
+    name: 'is_active',
+    required: false,
+    description: 'Filter by active status',
+    type: Boolean,
+  })
+  @ApiQuery({
+    name: 'sort_by',
+    required: false,
+    description: 'Sort by field',
+    enum: ['name', 'code', 'is_active', 'created_at', 'updated_at'],
+  })
+  @ApiQuery({
+    name: 'sort_order',
+    required: false,
+    description: 'Sort order',
+    enum: ['ASC', 'DESC'],
+  })
+  @ApiQuery({
+    name: 'offset',
+    required: false,
+    description: 'Offset for pagination',
+    type: Number,
+    example: 0,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Limit for pagination (max 100)',
+    type: Number,
+    example: 10,
+  })
   @ApiResponse({
     status: 200,
     description: 'Divisions retrieved successfully (paginated)',
-    schema: {
-      type: 'object',
-      properties: {
-        data: { type: 'array', items: { $ref: '#/components/schemas/DivisionResponseDto' } },
-        meta: {
-          type: 'object',
-          properties: {
-            total: { type: 'number' },
-            page: { type: 'number' },
-            limit: { type: 'number' },
-            totalPages: { type: 'number' },
-            hasNextPage: { type: 'boolean' },
-            hasPreviousPage: { type: 'boolean' },
-          },
-        },
-      },
-    },
+    type: PaginatedDivisionsResponseDto,
   })
   @ApiResponse({
     status: 401,
@@ -133,7 +159,7 @@ export class DivisionsController {
   async findAllByCompany(
     @Param('companyId') companyId: string,
     @Query() query: ListDivisionsQueryDto,
-  ): Promise<PaginatedResponseDto<DivisionResponseDto>> {
+  ): Promise<PaginatedDivisionsResponseDto> {
     return this.divisionsService.findAllByCompany(companyId, query);
   }
 

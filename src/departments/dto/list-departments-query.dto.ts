@@ -1,16 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean, IsIn } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsIn, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
-import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 const ALLOWED_SORT_FIELDS = ['name', 'code', 'is_active', 'created_at', 'updated_at'] as const;
 
 export type DepartmentSortField = (typeof ALLOWED_SORT_FIELDS)[number];
 
-export class ListDepartmentsQueryDto extends PaginationQueryDto {
+export class ListDepartmentsQueryDto {
   @ApiPropertyOptional({
     description: 'Filter by department name (partial, case-insensitive)',
-    example: 'HR',
   })
   @IsOptional()
   @IsString()
@@ -18,7 +16,6 @@ export class ListDepartmentsQueryDto extends PaginationQueryDto {
 
   @ApiPropertyOptional({
     description: 'Filter by department code (partial, case-insensitive)',
-    example: 'HR',
   })
   @IsOptional()
   @IsString()
@@ -26,7 +23,6 @@ export class ListDepartmentsQueryDto extends PaginationQueryDto {
 
   @ApiPropertyOptional({
     description: 'Filter by active status',
-    example: true,
   })
   @IsOptional()
   @Type(() => Boolean)
@@ -36,9 +32,34 @@ export class ListDepartmentsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
     description: 'Sort by field',
     enum: ALLOWED_SORT_FIELDS,
-    default: 'created_at',
   })
   @IsOptional()
   @IsIn(ALLOWED_SORT_FIELDS)
-  sortBy?: DepartmentSortField = 'created_at';
+  sort_by?: DepartmentSortField;
+
+  @ApiPropertyOptional({ description: 'Sort order', enum: ['ASC', 'DESC'] })
+  @IsOptional()
+  @IsIn(['ASC', 'DESC'])
+  sort_order?: 'ASC' | 'DESC';
+
+  @ApiPropertyOptional({
+    description: 'Offset for pagination',
+    example: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+
+  @ApiPropertyOptional({
+    description: 'Limit for pagination (max 100)',
+    example: 10,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
