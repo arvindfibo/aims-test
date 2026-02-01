@@ -50,6 +50,7 @@ export class TendersService {
       // Check if tender code already exists
       const existingTender = await queryRunner.manager.findOne(Tender, {
         where: { tender_code: createTenderDto.tender_code },
+        withDeleted: true,
       });
 
       if (existingTender) {
