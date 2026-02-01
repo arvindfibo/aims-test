@@ -7,16 +7,11 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  const isProduction = process.env.NODE_ENV === 'production';
-  const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
   app.enableCors({
-    origin: isProduction ? allowedOrigins : true,
+    origin: '*',
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+    credentials: false, // Set to false when using origin: '*'
     optionsSuccessStatus: 204,
   });
 
@@ -55,6 +50,7 @@ async function bootstrap() {
     .addTag('User Invites', 'User invitation management endpoints')
     .addTag('Divisions', 'Division management endpoints')
     .addTag('Departments', 'Department management endpoints')
+    .addTag('Tenders', 'Tender management endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
