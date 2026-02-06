@@ -5,12 +5,10 @@ import {
   Logger,
   UnauthorizedException,
   BadRequestException,
-  NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, IsNull } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { SignupDto, SignupResponseDto } from './dto/signup.dto';
 import { VerifyEmailDto, VerifyEmailResponseDto } from './dto/verify-email.dto';
@@ -216,7 +214,6 @@ export class AuthService {
     await queryRunner.startTransaction();
 
     try {
-      // Find user by email
       const user = await this.userRepository.findOne({
         where: {
           email: verifyEmailDto.email,
@@ -226,26 +223,17 @@ export class AuthService {
       if (!user) {
         throw new UnauthorizedException('Invalid email or OTP code');
       }
-
-      // Check if already verified
       if (user.is_verified) {
         throw new BadRequestException('Email is already verified');
       }
-
-      // Verify OTP
       const isOtpValid = await this.otpService.verifyEmailOtp(user.id, verifyEmailDto.otp_code);
-
       if (!isOtpValid) {
         throw new UnauthorizedException('Invalid or expired OTP code');
       }
-
-      // Update user as verified
       user.is_verified = true;
       const updatedUser = await queryRunner.manager.save(User, user);
 
       await queryRunner.commitTransaction();
-
-      // Generate JWT token
       const payload = {
         sub: user.id,
         email: user.email,
@@ -290,7 +278,6 @@ export class AuthService {
 
   async login(loginDto: LoginDto): Promise<LoginResponseDto> {
     try {
-      // Find user by email
       const user = await this.userRepository.findOne({
         where: {
           email: loginDto.email,
@@ -301,20 +288,14 @@ export class AuthService {
         this.logger.warn(`Login attempt with invalid email: ${loginDto.email}`);
         throw new UnauthorizedException('Invalid email or password');
       }
-
-      // Check if user is active
       if (!user.is_active) {
         this.logger.warn(`Login attempt for inactive user: ${user.email}`);
         throw new UnauthorizedException('Account is inactive. Please contact support.');
       }
-
-      // Check if user has a password (for SSO users, password might be null)
       if (!user.password) {
         this.logger.warn(`Login attempt for user without password: ${user.email}`);
         throw new UnauthorizedException('Invalid email or password');
       }
-
-      // Verify password
       const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
 
       if (!isPasswordValid) {
@@ -322,13 +303,10 @@ export class AuthService {
         throw new UnauthorizedException('Invalid email or password');
       }
 
-      // Check if email is verified (optional - you might want to allow unverified users)
       if (!user.is_verified) {
         this.logger.warn(`Login attempt for unverified user: ${user.email}`);
         throw new UnauthorizedException('Please verify your email before logging in.');
       }
-
-      // Generate JWT token
       const payload = {
         sub: user.id,
         email: user.email,
@@ -336,11 +314,8 @@ export class AuthService {
         last_name: user.last_name,
         is_verified: user.is_verified,
       };
-
       const accessToken = this.jwtService.sign(payload);
-
       this.logger.log(`User ${user.email} logged in successfully`);
-
       return {
         access_token: accessToken,
         token_type: 'Bearer',
@@ -367,7 +342,6 @@ export class AuthService {
 
   async resendOtp(resendOtpDto: ResendOtpDto): Promise<ResendOtpResponseDto> {
     try {
-      // Find user by email
       const user = await this.userRepository.findOne({
         where: {
           email: resendOtpDto.email,
@@ -375,25 +349,19 @@ export class AuthService {
       });
 
       if (!user) {
-        // Don't reveal if user exists or not for security
         this.logger.warn(`Resend OTP attempt for non-existent email: ${resendOtpDto.email}`);
         return {
           message: 'If the email exists, an OTP has been sent.',
           email: resendOtpDto.email,
         };
       }
-
-      // Check if already verified
       if (user.is_verified) {
         throw new BadRequestException('Email is already verified');
       }
-
-      // Generate and send new OTP
       try {
         this.logger.log(`Resending OTP for user ${user.id}`);
         const otpCode = await this.otpService.createEmailVerificationOtp(user.id);
         this.logger.log(`OTP generated: ${otpCode} for user ${user.email}`);
-
         await this.emailService.sendEmailVerificationOtp(user.email, user.first_name, otpCode);
         this.logger.log(`✅ Email verification OTP resent successfully to ${user.email}`);
       } catch (emailError) {
@@ -403,7 +371,6 @@ export class AuthService {
         );
         throw new InternalServerErrorException('Failed to send OTP email');
       }
-
       return {
         message: 'OTP has been sent to your email address.',
         email: user.email,
@@ -423,15 +390,12 @@ export class AuthService {
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<ForgotPasswordResponseDto> {
     try {
-      // Find user by email
       const user = await this.userRepository.findOne({
         where: {
           email: forgotPasswordDto.email,
         },
       });
-
       if (!user) {
-        // Don't reveal if user exists or not for security
         this.logger.warn(
           `Forgot password attempt for non-existent email: ${forgotPasswordDto.email}`,
         );
@@ -440,13 +404,10 @@ export class AuthService {
           email: forgotPasswordDto.email,
         };
       }
-
-      // Check if user is active
       if (!user.is_active) {
         throw new UnauthorizedException('Account is inactive. Please contact support.');
       }
 
-      // Generate and send password reset OTP
       try {
         this.logger.log(`Generating password reset OTP for user ${user.id}`);
         const otpCode = await this.otpService.createPasswordResetOtp(user.id);
@@ -485,7 +446,6 @@ export class AuthService {
     await queryRunner.startTransaction();
 
     try {
-      // Find user by email
       const user = await this.userRepository.findOne({
         where: {
           email: resetPasswordDto.email,
@@ -496,38 +456,27 @@ export class AuthService {
         throw new UnauthorizedException('Invalid email or OTP code');
       }
 
-      // Check if user is active
       if (!user.is_active) {
         throw new UnauthorizedException('Account is inactive. Please contact support.');
       }
 
-      // Verify OTP
       const isOtpValid = await this.otpService.verifyPasswordResetOtp(
         user.id,
         resetPasswordDto.otp_code,
       );
-
       if (!isOtpValid) {
         throw new UnauthorizedException('Invalid or expired OTP code');
       }
-
-      // Hash new password
       const hashedPassword = await bcrypt.hash(resetPasswordDto.new_password, this.SALT_ROUNDS);
-
-      // Update user password
       user.password = hashedPassword;
       await queryRunner.manager.save(User, user);
-
       await queryRunner.commitTransaction();
-
       this.logger.log(`Password reset successfully for user ${user.email}`);
-
       return {
         message: 'Password has been reset successfully.',
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-
       this.logger.error(
         `Password reset failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -537,97 +486,6 @@ export class AuthService {
       }
 
       throw new InternalServerErrorException('An error occurred during password reset');
-    } finally {
-      await queryRunner.release();
-    }
-  }
-
-  /**
-   * Assign GROUP_ADMIN role to a user who is super_admin of a company group
-   * This is a utility method to fix users who signed up before roles were seeded
-   * @param userId - User ID
-   * @returns Success message
-   */
-  async assignGroupAdminRoleToSuperAdmin(userId: string): Promise<{ message: string }> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      // Verify user exists
-      const user = await queryRunner.manager.findOne(User, {
-        where: { id: userId, deleted_at: IsNull() },
-      });
-
-      if (!user) {
-        throw new NotFoundException(`User with ID ${userId} not found`);
-      }
-
-      // Verify user is super_admin of at least one company group
-      const companyGroup = await queryRunner.manager.findOne(CompanyGroup, {
-        where: { company_group_admin_id: userId, deleted_at: IsNull() },
-      });
-
-      if (!companyGroup) {
-        throw new ForbiddenException('User is not a super admin of any company group');
-      }
-
-      // Get GROUP_ADMIN role
-      const groupAdminRole = await queryRunner.manager.findOne(Role, {
-        where: { name: 'GROUP_ADMIN' },
-      });
-
-      if (!groupAdminRole) {
-        throw new NotFoundException(
-          'GROUP_ADMIN role not found. Please run seeders first: pnpm seed:role',
-        );
-      }
-
-      // Check if role already assigned
-      const existingUserRole = await queryRunner.manager.findOne(UserRole, {
-        where: {
-          user_id: userId,
-          role_id: groupAdminRole.id,
-          company_id: IsNull(),
-          deleted_at: IsNull(),
-        },
-      });
-
-      if (existingUserRole) {
-        await queryRunner.rollbackTransaction();
-        return {
-          message: `User ${user.email} already has GROUP_ADMIN role assigned`,
-        };
-      }
-
-      // Assign role
-      const userRole = queryRunner.manager.create(UserRole, {
-        user_id: userId,
-        role_id: groupAdminRole.id,
-        company_id: null, // GROUP_ADMIN is at company group level
-      });
-
-      await queryRunner.manager.save(UserRole, userRole);
-      await queryRunner.commitTransaction();
-
-      this.logger.log(
-        `Assigned GROUP_ADMIN role to user ${user.email} (super admin of ${companyGroup.name})`,
-      );
-
-      return {
-        message: `GROUP_ADMIN role assigned successfully to ${user.email}`,
-      };
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-
-      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
-        throw error;
-      }
-
-      this.logger.error(
-        `Failed to assign GROUP_ADMIN role: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new InternalServerErrorException('Failed to assign GROUP_ADMIN role');
     } finally {
       await queryRunner.release();
     }

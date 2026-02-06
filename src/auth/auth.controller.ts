@@ -2,11 +2,9 @@ import {
   Controller,
   Post,
   Body,
-  Request,
   HttpCode,
   HttpStatus,
   Logger,
-  UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
 import {
@@ -18,7 +16,6 @@ import {
   ApiConflictResponse,
   ApiInternalServerErrorResponse,
   ApiUnauthorizedResponse,
-  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { SignupDto, SignupResponseDto } from './dto/signup.dto';
@@ -31,8 +28,6 @@ import {
   ResetPasswordDto,
   ResetPasswordResponseDto,
 } from './dto/forgot-password.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import type { Request as ExpressRequest } from 'express';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -475,50 +470,5 @@ export class AuthController {
   ): Promise<ResetPasswordResponseDto> {
     this.logger.log(`Reset password request for email: ${resetPasswordDto.email}`);
     return this.authService.resetPassword(resetPasswordDto);
-  }
-
-  @Post('fix-role-assignment')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Fix GROUP_ADMIN role assignment for super admin',
-    description:
-      'Utility endpoint to assign GROUP_ADMIN role to users who are super admins but missing the role. Requires authentication. Automatically uses the authenticated user ID.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Role assigned successfully or already assigned',
-    schema: {
-      type: 'object',
-      properties: {
-        message: {
-          type: 'string',
-          example: 'GROUP_ADMIN role assigned successfully to user@example.com',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - invalid or missing JWT token',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - user is not a super admin of any company group',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'User or GROUP_ADMIN role not found',
-  })
-  @ApiResponse({
-    status: 500,
-    description: 'Internal server error',
-  })
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  async fixRoleAssignment(
-    @Request() req: ExpressRequest & { user: { id: string } },
-  ): Promise<{ message: string }> {
-    this.logger.log(`Fix role assignment request for user: ${req.user.id}`);
-    return this.authService.assignGroupAdminRoleToSuperAdmin(req.user.id);
   }
 }
