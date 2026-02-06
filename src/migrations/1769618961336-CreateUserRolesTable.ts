@@ -22,8 +22,14 @@ export class CreateUserRolesTable1769618961336 implements MigrationInterface {
           },
           {
             name: 'role_id',
-            type: 'integer',
+            type: 'uuid',
             isNullable: false,
+          },
+          {
+            name: 'company_group_id',
+            type: 'uuid',
+            isNullable: true,
+            comment: 'Link to specific company group (if applicable)',
           },
           {
             name: 'company_id',
@@ -79,6 +85,11 @@ export class CreateUserRolesTable1769618961336 implements MigrationInterface {
         ],
         indices: [
           {
+            name: 'UQ_user_roles_user_role_company_group',
+            columnNames: ['user_id', 'role_id', 'company_group_id'],
+            isUnique: true,
+          },
+          {
             name: 'UQ_user_roles_user_role_company',
             columnNames: ['user_id', 'role_id', 'company_id'],
             isUnique: true,
@@ -90,6 +101,10 @@ export class CreateUserRolesTable1769618961336 implements MigrationInterface {
           {
             name: 'IDX_user_roles_role_id',
             columnNames: ['role_id'],
+          },
+          {
+            name: 'IDX_user_roles_company_group_id',
+            columnNames: ['company_group_id'],
           },
           {
             name: 'IDX_user_roles_company_id',
@@ -106,6 +121,10 @@ export class CreateUserRolesTable1769618961336 implements MigrationInterface {
           {
             name: 'IDX_user_roles_user_role',
             columnNames: ['user_id', 'role_id'],
+          },
+          {
+            name: 'IDX_user_roles_user_company_group',
+            columnNames: ['user_id', 'company_group_id'],
           },
           {
             name: 'IDX_user_roles_user_company',
@@ -139,6 +158,13 @@ export class CreateUserRolesTable1769618961336 implements MigrationInterface {
           {
             columnNames: ['role_id'],
             referencedTableName: 'roles',
+            referencedColumnNames: ['id'],
+            onDelete: 'CASCADE',
+            onUpdate: 'CASCADE',
+          },
+          {
+            columnNames: ['company_group_id'],
+            referencedTableName: 'company_groups',
             referencedColumnNames: ['id'],
             onDelete: 'CASCADE',
             onUpdate: 'CASCADE',

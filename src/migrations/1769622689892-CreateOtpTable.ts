@@ -16,6 +16,12 @@ export class CreateOtpTable1769622689892 implements MigrationInterface {
             default: 'gen_random_uuid()',
           },
           {
+            name: 'user_id',
+            type: 'uuid',
+            isNullable: false,
+            comment: 'Link to user who owns this OTP',
+          },
+          {
             name: 'otp_code',
             type: 'varchar',
             length: '10',
@@ -70,6 +76,10 @@ export class CreateOtpTable1769622689892 implements MigrationInterface {
         ],
         indices: [
           {
+            name: 'IDX_otps_user_id',
+            columnNames: ['user_id'],
+          },
+          {
             name: 'IDX_otps_otp_code',
             columnNames: ['otp_code'],
           },
@@ -78,12 +88,25 @@ export class CreateOtpTable1769622689892 implements MigrationInterface {
             columnNames: ['otp_type'],
           },
           {
+            name: 'IDX_otps_user_otp_type',
+            columnNames: ['user_id', 'otp_type'],
+          },
+          {
             name: 'IDX_otps_is_used',
             columnNames: ['is_used'],
           },
           {
             name: 'IDX_otps_expires_at',
             columnNames: ['expires_at'],
+          },
+        ],
+        foreignKeys: [
+          {
+            columnNames: ['user_id'],
+            referencedTableName: 'users',
+            referencedColumnNames: ['id'],
+            onDelete: 'CASCADE',
+            onUpdate: 'CASCADE',
           },
         ],
       }),

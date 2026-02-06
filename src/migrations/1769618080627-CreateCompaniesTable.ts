@@ -122,7 +122,7 @@ export class CreateCompaniesTable1769618080627 implements MigrationInterface {
             isNullable: false,
           },
           {
-            name: 'company_admin_user_id',
+            name: 'company_admin_id',
             type: 'uuid',
             isNullable: true,
           },
@@ -191,8 +191,8 @@ export class CreateCompaniesTable1769618080627 implements MigrationInterface {
             columnNames: ['email'],
           },
           {
-            name: 'IDX_companies_company_admin_user_id',
-            columnNames: ['company_admin_user_id'],
+            name: 'IDX_companies_company_admin_id',
+            columnNames: ['company_admin_id'],
           },
           {
             name: 'IDX_companies_is_active',
@@ -220,7 +220,7 @@ export class CreateCompaniesTable1769618080627 implements MigrationInterface {
             onUpdate: 'CASCADE',
           },
           {
-            columnNames: ['company_admin_user_id'],
+            columnNames: ['company_admin_id'],
             referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'SET NULL',

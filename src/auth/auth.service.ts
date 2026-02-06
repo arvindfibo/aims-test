@@ -110,7 +110,7 @@ export class AuthService {
         code: signupDto.company_group.code || null,
         description: signupDto.company_group.description || null,
         is_active: true,
-        super_admin_id: savedUser.id,
+        company_group_admin_id: savedUser.id,
       });
 
       const savedCompanyGroup = await queryRunner.manager.save(CompanyGroup, companyGroup);
@@ -118,13 +118,6 @@ export class AuthService {
       if (!savedCompanyGroup) {
         throw new InternalServerErrorException('Failed to create company group');
       }
-
-      // Verify user is the super_admin of the company group before assigning role
-      if (savedCompanyGroup.super_admin_id !== savedUser.id) {
-        throw new InternalServerErrorException('User is not the super admin of the company group');
-      }
-
-      // Assign GROUP_ADMIN role to the user who created the company group
       const groupAdminRole = await queryRunner.manager.findOne(Role, {
         where: { name: 'GROUP_ADMIN' },
       });
@@ -136,33 +129,27 @@ export class AuthService {
         );
       }
 
-      // Verify no duplicate role assignment exists
       const existingUserRole = await queryRunner.manager.findOne(UserRole, {
         where: {
           user_id: savedUser.id,
           role_id: groupAdminRole.id,
-          company_id: IsNull(),
+          company_group_id: savedCompanyGroup.id,
         },
       });
 
-      if (!existingUserRole) {
-        const userRole = queryRunner.manager.create(UserRole, {
-          user_id: savedUser.id,
-          role_id: groupAdminRole.id,
-          company_id: null, // GROUP_ADMIN is at company group level, not company level
-        });
-
-        await queryRunner.manager.save(UserRole, userRole);
-        this.logger.log(
-          `Assigned GROUP_ADMIN role to user ${savedUser.email} for company group ${savedCompanyGroup.name}`,
-        );
-      } else {
-        this.logger.warn(`User ${savedUser.email} already has GROUP_ADMIN role assigned`);
+      if (existingUserRole) {
+        throw new ConflictException('User already has GROUP_ADMIN role assigned');
       }
+
+      const userRole = this.userRoleRepository.create({
+        user_id: savedUser.id,
+        role_id: groupAdminRole.id,
+        company_group_id: savedCompanyGroup.id,
+      });
+      await queryRunner.manager.save(UserRole, userRole);
 
       await queryRunner.commitTransaction();
 
-      // Generate and send email verification OTP (outside transaction)
       try {
         this.logger.log(`Generating OTP for user ${savedUser.id}`);
         const otpCode = await this.otpService.createEmailVerificationOtp(savedUser.id);
@@ -174,10 +161,9 @@ export class AuthService {
           savedUser.first_name,
           otpCode,
         );
-        this.logger.log(`✅ Email verification OTP sent successfully to ${savedUser.email}`);
+        this.logger.log(`Email verification OTP sent successfully to ${savedUser.email}`);
       } catch (emailError) {
-        // Log detailed error but don't fail signup if email fails
-        this.logger.error(`❌ Failed to send verification email to ${savedUser.email}`);
+        this.logger.error(`Failed to send verification email to ${savedUser.email}`);
         this.logger.error(
           `Error details: ${emailError instanceof Error ? emailError.message : String(emailError)}`,
         );
@@ -579,7 +565,7 @@ export class AuthService {
 
       // Verify user is super_admin of at least one company group
       const companyGroup = await queryRunner.manager.findOne(CompanyGroup, {
-        where: { super_admin_id: userId, deleted_at: IsNull() },
+        where: { company_group_admin_id: userId, deleted_at: IsNull() },
       });
 
       if (!companyGroup) {

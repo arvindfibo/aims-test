@@ -28,10 +28,10 @@ export class CompanyGroup {
   is_active: boolean;
 
   @Column({ type: 'uuid' })
-  super_admin_id: string;
+  company_group_admin_id: string;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'super_admin_id' })
+  @JoinColumn({ name: 'company_group_admin_id' })
   super_admin: User;
 
   @CreateDateColumn()

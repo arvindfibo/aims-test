@@ -58,6 +58,12 @@ export class CreateUserTable1769605833196 implements MigrationInterface {
             isNullable: false,
           },
           {
+            name: 'metadata',
+            type: 'jsonb',
+            isNullable: true,
+            comment: 'Flexible metadata storage',
+          },
+          {
             name: 'created_at',
             type: 'timestamp',
             default: 'CURRENT_TIMESTAMP',

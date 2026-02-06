@@ -41,7 +41,7 @@ export class CreateCompanyGroupsTable1769617861166 implements MigrationInterface
             isNullable: false,
           },
           {
-            name: 'super_admin_id',
+            name: 'company_group_admin_id',
             type: 'uuid',
             isNullable: false,
           },
@@ -92,8 +92,8 @@ export class CreateCompanyGroupsTable1769617861166 implements MigrationInterface
             isUnique: true,
           },
           {
-            name: 'IDX_company_groups_super_admin_id',
-            columnNames: ['super_admin_id'],
+            name: 'IDX_company_group_admin_id',
+            columnNames: ['company_group_admin_id'],
           },
           {
             name: 'IDX_company_groups_is_active',
@@ -110,7 +110,7 @@ export class CreateCompanyGroupsTable1769617861166 implements MigrationInterface
         ],
         foreignKeys: [
           {
-            columnNames: ['super_admin_id'],
+            columnNames: ['company_group_admin_id'],
             referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'RESTRICT',

@@ -173,7 +173,7 @@ export class CompaniesService {
     try {
       // Find the company group where user is the super admin
       const companyGroup = await this.companyGroupRepository.findOne({
-        where: { super_admin_id: userId },
+        where: { company_group_admin_id: userId },
       });
 
       if (!companyGroup) {
@@ -405,7 +405,7 @@ export class CompaniesService {
     try {
       // Find the company group where user is the super admin
       const companyGroup = await this.companyGroupRepository.findOne({
-        where: { super_admin_id: userId },
+        where: { company_group_admin_id: userId },
       });
 
       if (!companyGroup) {

@@ -637,7 +637,7 @@ export class ProjectsService {
 
     if (isGroupAdmin) {
       const companyGroup = await this.companyGroupRepository.findOne({
-        where: { super_admin_id: userId },
+        where: { company_group_admin_id: userId },
       });
 
       if (!companyGroup) {
@@ -699,7 +699,7 @@ export class ProjectsService {
 
     if (isGroupAdmin) {
       const companyGroup = await this.companyGroupRepository.findOne({
-        where: { super_admin_id: userId },
+        where: { company_group_admin_id: userId },
       });
 
       if (!companyGroup) {
@@ -737,7 +737,7 @@ export class ProjectsService {
 
     if (isGroupAdmin) {
       const companyGroup = await this.companyGroupRepository.findOne({
-        where: { super_admin_id: userId },
+        where: { company_group_admin_id: userId },
       });
 
       if (!companyGroup) {

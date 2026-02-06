@@ -44,7 +44,7 @@ export class CreateDepartmentsTable1769618600151 implements MigrationInterface {
             isNullable: false,
           },
           {
-            name: 'department_admin_user_id',
+            name: 'department_admin_id',
             type: 'uuid',
             isNullable: true,
           },
@@ -99,8 +99,8 @@ export class CreateDepartmentsTable1769618600151 implements MigrationInterface {
             columnNames: ['division_id'],
           },
           {
-            name: 'IDX_departments_department_admin_user_id',
-            columnNames: ['department_admin_user_id'],
+            name: 'IDX_departments_department_admin_id',
+            columnNames: ['department_admin_id'],
           },
           {
             name: 'IDX_departments_is_active',
@@ -124,7 +124,7 @@ export class CreateDepartmentsTable1769618600151 implements MigrationInterface {
             onUpdate: 'CASCADE',
           },
           {
-            columnNames: ['department_admin_user_id'],
+            columnNames: ['department_admin_id'],
             referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'SET NULL',

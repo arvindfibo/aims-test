@@ -10,6 +10,8 @@ import {
 } from 'typeorm';
 import { User } from './user.entity';
 import { Role } from './role.entity';
+import { CompanyGroup } from './company-group.entity';
+import { Company } from './company.entity';
 
 @Entity('user_roles')
 export class UserRole {
@@ -24,6 +26,9 @@ export class UserRole {
 
   @Column({ type: 'uuid', nullable: true })
   company_id: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  company_group_id: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   division_id: string | null;
@@ -43,6 +48,14 @@ export class UserRole {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  @ManyToOne(() => Company)
+  @JoinColumn({ name: 'company_id' })
+  company: Company;
+
+  @ManyToOne(() => CompanyGroup)
+  @JoinColumn({ name: 'company_group_id' })
+  company_group: CompanyGroup;
 
   @ManyToOne(() => Role)
   @JoinColumn({ name: 'role_id' })

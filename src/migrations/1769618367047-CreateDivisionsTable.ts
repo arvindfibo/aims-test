@@ -44,7 +44,7 @@ export class CreateDivisionsTable1769618367047 implements MigrationInterface {
             isNullable: false,
           },
           {
-            name: 'division_admin_user_id',
+            name: 'division_admin_id',
             type: 'uuid',
             isNullable: true,
           },
@@ -99,8 +99,8 @@ export class CreateDivisionsTable1769618367047 implements MigrationInterface {
             columnNames: ['company_id'],
           },
           {
-            name: 'IDX_divisions_division_admin_user_id',
-            columnNames: ['division_admin_user_id'],
+            name: 'IDX_divisions_division_admin_id',
+            columnNames: ['division_admin_id'],
           },
           {
             name: 'IDX_divisions_is_active',
@@ -124,7 +124,7 @@ export class CreateDivisionsTable1769618367047 implements MigrationInterface {
             onUpdate: 'CASCADE',
           },
           {
-            columnNames: ['division_admin_user_id'],
+            columnNames: ['division_admin_id'],
             referencedTableName: 'users',
             referencedColumnNames: ['id'],
             onDelete: 'SET NULL',

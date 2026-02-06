@@ -4,10 +4,44 @@ export class CreateTendersTable1769673033843 implements MigrationInterface {
   name = 'CreateTendersTable1769673033843';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Create enum type for currency
+    // Create enum types
     await queryRunner.query(`
       DO $$ BEGIN
         CREATE TYPE "currency_enum" AS ENUM ('INR', 'USD');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    await queryRunner.query(`
+      DO $$ BEGIN
+        CREATE TYPE "tender_status_enum" AS ENUM (
+          'Not Filled',
+          'On Going',
+          'L-1',
+          'L-1(work alloted to Us)',
+          'L-2',
+          'L-3',
+          'L-4',
+          'Quoted',
+          'Submitted',
+          'Won',
+          'Lost',
+          'Cancelled'
+        );
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    await queryRunner.query(`
+      DO $$ BEGIN
+        CREATE TYPE "emd_status_enum" AS ENUM (
+          'Pending',
+          'Paid',
+          'Returned',
+          'Not Applicable'
+        );
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
@@ -155,8 +189,7 @@ export class CreateTendersTable1769673033843 implements MigrationInterface {
           },
           {
             name: 'last_date_of_submission',
-            type: 'varchar',
-            length: '255',
+            type: 'timestamp',
             isNullable: true,
           },
           {
@@ -166,21 +199,19 @@ export class CreateTendersTable1769673033843 implements MigrationInterface {
           },
           {
             name: 'tender_status',
-            type: 'varchar',
-            length: '100',
+            type: 'tender_status_enum',
             isNullable: true,
           },
           {
             name: 'emd_status',
-            type: 'varchar',
-            length: '100',
+            type: 'emd_status_enum',
             isNullable: true,
           },
           {
             name: 'emd_returned',
-            type: 'varchar',
-            length: '100',
-            isNullable: true,
+            type: 'boolean',
+            default: false,
+            isNullable: false,
           },
           {
             name: 'created_by',
@@ -299,5 +330,7 @@ export class CreateTendersTable1769673033843 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropTable('tenders');
     await queryRunner.query(`DROP TYPE IF EXISTS "currency_enum"`);
+    await queryRunner.query(`DROP TYPE IF EXISTS "tender_status_enum"`);
+    await queryRunner.query(`DROP TYPE IF EXISTS "emd_status_enum"`);
   }
 }

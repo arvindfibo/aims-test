@@ -44,7 +44,7 @@ export class CompanyGroupsService {
     try {
       const companyGroups = await this.companyGroupRepository.find({
         where: {
-          super_admin_id: superAdminId,
+          company_group_admin_id: superAdminId,
           deleted_at: IsNull(),
         },
         order: {
@@ -92,7 +92,7 @@ export class CompanyGroupsService {
 
       if (highestRole === 'GROUP_ADMIN') {
         const companyGroup = await this.companyGroupRepository.findOne({
-          where: { super_admin_id: userId, deleted_at: IsNull() },
+          where: { company_group_admin_id: userId, deleted_at: IsNull() },
         });
 
         if (!companyGroup) {
@@ -368,7 +368,7 @@ export class CompanyGroupsService {
       code: companyGroup.code || null,
       description: companyGroup.description || null,
       is_active: companyGroup.is_active,
-      super_admin_id: companyGroup.super_admin_id,
+      company_group_admin_id: companyGroup.company_group_admin_id,
       created_at: companyGroup.created_at,
       updated_at: companyGroup.updated_at,
     };

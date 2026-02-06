@@ -35,7 +35,7 @@ export class CompanyGroupResponseDto {
     description: 'Super admin user ID',
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
-  super_admin_id: string;
+  company_group_admin_id: string;
 
   @ApiProperty({
     description: 'Company group creation timestamp',

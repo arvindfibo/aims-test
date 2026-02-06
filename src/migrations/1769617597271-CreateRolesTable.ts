@@ -10,10 +10,10 @@ export class CreateRolesTable1769617597271 implements MigrationInterface {
         columns: [
           {
             name: 'id',
-            type: 'integer',
+            type: 'uuid',
             isPrimary: true,
-            isGenerated: true,
-            generationStrategy: 'increment',
+            generationStrategy: 'uuid',
+            default: 'gen_random_uuid()',
           },
           {
             name: 'name',
