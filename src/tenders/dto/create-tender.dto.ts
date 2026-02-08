@@ -263,8 +263,9 @@ export class TenderResponseDto {
   @ApiPropertyOptional({
     description: 'Tender cost currency',
     enum: Currency,
+    example: 'INR',
   })
-  tender_cost_currency?: Currency;
+  tender_cost_currency?: string;
 
   @ApiPropertyOptional({
     description: 'Processing fee',
@@ -275,8 +276,9 @@ export class TenderResponseDto {
   @ApiPropertyOptional({
     description: 'Processing fee currency',
     enum: Currency,
+    example: 'INR',
   })
-  processing_fee_currency?: Currency;
+  processing_fee_currency?: string;
 
   @ApiPropertyOptional({
     description: 'EMD amount',
@@ -287,8 +289,9 @@ export class TenderResponseDto {
   @ApiPropertyOptional({
     description: 'EMD currency',
     enum: Currency,
+    example: 'INR',
   })
-  emd_currency?: Currency;
+  emd_currency?: string;
 
   @ApiPropertyOptional({
     description: 'Bank charges',
@@ -299,8 +302,9 @@ export class TenderResponseDto {
   @ApiPropertyOptional({
     description: 'Bank charges currency',
     enum: Currency,
+    example: 'INR',
   })
-  bank_charges_currency?: Currency;
+  bank_charges_currency?: string;
 
   @ApiPropertyOptional({
     description: 'Documentation charges',
@@ -311,8 +315,9 @@ export class TenderResponseDto {
   @ApiPropertyOptional({
     description: 'Documentation charges currency',
     enum: Currency,
+    example: 'INR',
   })
-  documentation_charges_currency?: Currency;
+  documentation_charges_currency?: string;
 
   @ApiPropertyOptional({
     description: 'Total tender value',
@@ -323,8 +328,9 @@ export class TenderResponseDto {
   @ApiPropertyOptional({
     description: 'Total tender value currency',
     enum: Currency,
+    example: 'INR',
   })
-  total_tender_value_currency?: Currency;
+  total_tender_value_currency?: string;
 
   @ApiPropertyOptional({
     description: 'Last date of submission',

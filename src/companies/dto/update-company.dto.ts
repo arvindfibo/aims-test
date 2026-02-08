@@ -173,7 +173,7 @@ export class UpdateCompanyDto {
   })
   @IsOptional()
   @IsUUID('4', { message: 'Company admin user ID must be a valid UUID' })
-  company_admin_user_id?: string;
+  company_admin_id?: string;
 
   @ApiPropertyOptional({
     description: 'Is company active',

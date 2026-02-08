@@ -32,12 +32,12 @@ export class Otp {
   @Column({ type: 'integer', default: 3 })
   max_attempts: number;
 
-  @Column({ type: 'uuid', nullable: true })
-  user_id: string | null;
+  @Column({ type: 'uuid' })
+  user_id: string;
 
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
-  user: User | null;
+  user: User;
 
   @CreateDateColumn()
   created_at: Date;

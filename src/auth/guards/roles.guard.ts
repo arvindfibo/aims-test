@@ -1,11 +1,16 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import type { Request as ExpressRequest } from 'express';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import { UserRole } from '../../entities/user-role.entity';
-import { Role } from '../../entities/role.entity';
 
 interface AuthenticatedUser {
   id: string;
@@ -21,14 +26,18 @@ interface AuthenticatedRequest extends ExpressRequest {
   userRoles?: string[];
 }
 
+interface RoleQueryResult {
+  name: string;
+}
+
 @Injectable()
 export class RolesGuard implements CanActivate {
+  private readonly logger = new Logger(RolesGuard.name);
+
   constructor(
-    private reflector: Reflector,
-    @InjectRepository(UserRole)
-    private readonly userRoleRepository: Repository<UserRole>,
-    @InjectRepository(Role)
-    private readonly roleRepository: Repository<Role>,
+    private readonly reflector: Reflector,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -48,36 +57,49 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Get user roles from database using TypeORM repository
-    // This query matches the database schema:
-    // - user_roles.user_id (uuid) -> users.id
-    // - user_roles.role_id (uuid) -> roles.id
-    // - user_roles.deleted_at IS NULL (soft delete check)
-    const userRoles = await this.userRoleRepository.find({
-      where: {
-        user_id: user.id,
-        deleted_at: IsNull(),
-      },
-      relations: ['role'],
-    });
-
-    // Extract role names from the relations
-    const userRoleNames = userRoles
-      .map((userRole) => userRole.role?.name)
-      .filter((name): name is string => name !== undefined);
-
-    // Check if user has at least one of the required roles
-    const hasRole = requiredRoles.some((role) => userRoleNames.includes(role));
-
-    if (!hasRole) {
-      throw new ForbiddenException(
-        `Access denied. Required roles: ${requiredRoles.join(', ')}. User has roles: ${userRoleNames.join(', ') || 'none'}`,
-      );
+    if (!user.id) {
+      throw new ForbiddenException('Invalid user identifier');
     }
 
-    // Attach user roles to request for use in controllers
-    request.userRoles = userRoleNames;
+    try {
+      const userRoles = await this.dataSource.query<RoleQueryResult[]>(
+        `SELECT r.name 
+         FROM user_roles ur
+         INNER JOIN roles r ON ur.role_id = r.id
+         WHERE ur.user_id = $1 AND ur.deleted_at IS NULL`,
+        [user.id],
+      );
 
-    return true;
+      const userRoleNames = userRoles.map((role) => role.name).filter(Boolean);
+
+      if (userRoleNames.length === 0) {
+        throw new ForbiddenException(
+          `Access denied. Required roles: ${requiredRoles.join(', ')}. User has no roles assigned.`,
+        );
+      }
+
+      const hasRequiredRole = requiredRoles.some((role) => userRoleNames.includes(role));
+
+      if (!hasRequiredRole) {
+        throw new ForbiddenException(
+          `Access denied. Required roles: ${requiredRoles.join(', ')}. User has roles: ${userRoleNames.join(', ')}`,
+        );
+      }
+
+      request.userRoles = userRoleNames;
+
+      return true;
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to check user roles: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new InternalServerErrorException('Failed to verify user roles');
+    }
   }
 }

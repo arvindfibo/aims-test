@@ -31,12 +31,14 @@ export class UpdateDivisionDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Division admin user ID',
+    description: 'Division admin ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   @IsOptional()
-  @IsUUID('4', { message: 'Division admin user ID must be a valid UUID' })
-  division_admin_user_id?: string;
+  @IsUUID('4', { message: 'Division admin ID must be a valid UUID' })
+  division_admin_id?: string;
 
   @ApiPropertyOptional({
     description: 'Is division active',

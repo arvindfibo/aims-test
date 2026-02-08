@@ -53,17 +53,11 @@ export class GetTendersQueryDto {
   @IsString()
   client_name?: string;
 
-  @ApiPropertyOptional({
-    description: 'Filter by NIT number (exact match)',
-  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   nit_number?: string;
 
-  @ApiPropertyOptional({
-    description: 'Filter by name of work (exact match)',
-  })
   @IsOptional()
   @IsString()
   name_of_work?: string;

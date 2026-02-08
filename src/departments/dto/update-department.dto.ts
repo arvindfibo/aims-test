@@ -31,12 +31,14 @@ export class UpdateDepartmentDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Department admin user ID',
+    description: 'Department admin ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   @IsOptional()
-  @IsUUID('4', { message: 'Department admin user ID must be a valid UUID' })
-  department_admin_user_id?: string;
+  @IsUUID('4', { message: 'Department admin ID must be a valid UUID' })
+  department_admin_id?: string;
 
   @ApiPropertyOptional({
     description: 'Is department active',

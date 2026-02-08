@@ -2,8 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class DeleteDepartmentResponseDto {
   @ApiProperty({
-    description: 'Department ID',
+    description: 'Department ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   id: string;
 

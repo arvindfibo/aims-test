@@ -13,8 +13,16 @@ import {
   HttpStatus,
   UsePipes,
   ValidationPipe,
+  ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { DivisionsService } from './divisions.service';
 import { CreateDivisionDto, DivisionResponseDto } from './dto/create-division.dto';
@@ -53,11 +61,12 @@ export class DivisionsController {
   @ApiOperation({
     summary: 'Create a new division',
     description:
-      'GROUP_ADMIN and COMPANY_ADMIN can create divisions. Creates a new division within a company.',
+      'GROUP_ADMIN and COMPANY_ADMIN can create divisions. Creates a new division within a company. Returns division details with statistics fields (users_count, departments_count will be 0 for newly created divisions).',
   })
   @ApiResponse({
     status: 201,
-    description: 'Division created successfully',
+    description:
+      'Division created successfully. Response includes statistics fields (counts will be 0 for new divisions).',
     type: DivisionResponseDto,
   })
   @ApiResponse({
@@ -91,10 +100,17 @@ export class DivisionsController {
   @Get('company/:companyId')
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN', 'DIVISION_USER', 'COMPANY_USER')
+  @ApiParam({
+    name: 'companyId',
+    description: 'Company ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Get all divisions for a company',
     description:
-      'Retrieves divisions for a company with pagination, sorting, and optional filters (name, code, is_active).',
+      'Retrieves divisions for a company with pagination, sorting, and optional filters (name, code, is_active). Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
   })
   @ApiQuery({
     name: 'name',
@@ -140,7 +156,8 @@ export class DivisionsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Divisions retrieved successfully (paginated)',
+    description:
+      'Divisions retrieved successfully (paginated). Each division includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
     type: PaginatedDivisionsResponseDto,
   })
   @ApiResponse({
@@ -157,7 +174,7 @@ export class DivisionsController {
   })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async findAllByCompany(
-    @Param('companyId') companyId: string,
+    @Param('companyId', ParseUUIDPipe) companyId: string,
     @Query() query: ListDivisionsQueryDto,
   ): Promise<PaginatedDivisionsResponseDto> {
     return this.divisionsService.findAllByCompany(companyId, query);
@@ -166,13 +183,21 @@ export class DivisionsController {
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN', 'DIVISION_USER', 'COMPANY_USER')
+  @ApiParam({
+    name: 'id',
+    description: 'Division ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Get a division by ID',
-    description: 'Retrieves a single division by its ID. User must have appropriate role.',
+    description:
+      'Retrieves a single division by its ID with statistics including total users and departments count. User must have appropriate role.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Division retrieved successfully',
+    description: 'Division retrieved successfully with statistics (users_count, departments_count)',
     type: DivisionResponseDto,
   })
   @ApiResponse({
@@ -187,21 +212,29 @@ export class DivisionsController {
     status: 404,
     description: 'Division not found',
   })
-  async findOne(@Param('id') id: string): Promise<DivisionResponseDto> {
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<DivisionResponseDto> {
     return this.divisionsService.findOne(id);
   }
 
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN')
+  @ApiParam({
+    name: 'id',
+    description: 'Division ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Update a division',
     description:
-      'GROUP_ADMIN can update any division. COMPANY_ADMIN can update divisions in their company. DIVISION_ADMIN can update only their division.',
+      'GROUP_ADMIN can update any division. COMPANY_ADMIN can update divisions in their company. DIVISION_ADMIN can update only their division. Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
   })
   @ApiResponse({
     status: 200,
-    description: 'Division updated successfully',
+    description:
+      'Division updated successfully. Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
     type: DivisionResponseDto,
   })
   @ApiResponse({
@@ -226,7 +259,7 @@ export class DivisionsController {
   })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDivisionDto: UpdateDivisionDto,
     @Request() req: AuthenticatedRequest,
   ): Promise<DivisionResponseDto> {
@@ -236,6 +269,13 @@ export class DivisionsController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN')
+  @ApiParam({
+    name: 'id',
+    description: 'Division ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Delete a division (soft delete)',
     description:
@@ -259,7 +299,7 @@ export class DivisionsController {
     description: 'Division not found',
   })
   async remove(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<DeleteDivisionResponseDto> {
     return this.divisionsService.remove(id, req.user.id, req.userRoles);

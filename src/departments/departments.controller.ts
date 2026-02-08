@@ -13,8 +13,16 @@ import {
   HttpStatus,
   UsePipes,
   ValidationPipe,
+  ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { DepartmentsService } from './departments.service';
 import { CreateDepartmentDto, DepartmentResponseDto } from './dto/create-department.dto';
@@ -53,11 +61,12 @@ export class DepartmentsController {
   @ApiOperation({
     summary: 'Create a new department',
     description:
-      'GROUP_ADMIN, COMPANY_ADMIN (of company), and DIVISION_ADMIN (of division) can create departments. Creates a new department within a division.',
+      'GROUP_ADMIN, COMPANY_ADMIN (of company), and DIVISION_ADMIN (of division) can create departments. Creates a new department within a division. Returns department details with statistics fields (users_count will be 0 for newly created departments).',
   })
   @ApiResponse({
     status: 201,
-    description: 'Department created successfully',
+    description:
+      'Department created successfully. Response includes statistics fields (counts will be 0 for new departments).',
     type: DepartmentResponseDto,
   })
   @ApiResponse({
@@ -99,10 +108,17 @@ export class DepartmentsController {
     'DIVISION_USER',
     'COMPANY_USER',
   )
+  @ApiParam({
+    name: 'divisionId',
+    description: 'Division ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Get all departments for a division',
     description:
-      'Retrieves departments for a division with pagination, sorting, and optional filters (name, code, is_active).',
+      'Retrieves departments for a division with pagination, sorting, and optional filters (name, code, is_active). Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
   })
   @ApiQuery({
     name: 'name',
@@ -148,7 +164,8 @@ export class DepartmentsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Departments retrieved successfully (paginated)',
+    description:
+      'Departments retrieved successfully (paginated). Each department includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
     type: PaginatedDepartmentsResponseDto,
   })
   @ApiResponse({
@@ -165,7 +182,7 @@ export class DepartmentsController {
   })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async findAllByDivision(
-    @Param('divisionId') divisionId: string,
+    @Param('divisionId', ParseUUIDPipe) divisionId: string,
     @Query() query: ListDepartmentsQueryDto,
   ): Promise<PaginatedDepartmentsResponseDto> {
     return this.departmentsService.findAllByDivision(divisionId, query);
@@ -182,13 +199,21 @@ export class DepartmentsController {
     'DIVISION_USER',
     'COMPANY_USER',
   )
+  @ApiParam({
+    name: 'id',
+    description: 'Department ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Get a department by ID',
-    description: 'Retrieves a single department by its ID. User must have appropriate role.',
+    description:
+      'Retrieves a single department by its ID with statistics including total users count. User must have appropriate role.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Department retrieved successfully',
+    description: 'Department retrieved successfully with statistics (users_count)',
     type: DepartmentResponseDto,
   })
   @ApiResponse({
@@ -203,21 +228,29 @@ export class DepartmentsController {
     status: 404,
     description: 'Department not found',
   })
-  async findOne(@Param('id') id: string): Promise<DepartmentResponseDto> {
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<DepartmentResponseDto> {
     return this.departmentsService.findOne(id);
   }
 
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN', 'DEPARTMENT_ADMIN')
+  @ApiParam({
+    name: 'id',
+    description: 'Department ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Update a department',
     description:
-      'GROUP_ADMIN can update any department. COMPANY_ADMIN can update departments in their company. DIVISION_ADMIN can update departments in their division. DEPARTMENT_ADMIN can update only their department.',
+      'GROUP_ADMIN can update any department. COMPANY_ADMIN can update departments in their company. DIVISION_ADMIN can update departments in their division. DEPARTMENT_ADMIN can update only their department. Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
   })
   @ApiResponse({
     status: 200,
-    description: 'Department updated successfully',
+    description:
+      'Department updated successfully. Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
     type: DepartmentResponseDto,
   })
   @ApiResponse({
@@ -242,7 +275,7 @@ export class DepartmentsController {
   })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDepartmentDto: UpdateDepartmentDto,
     @Request() req: AuthenticatedRequest,
   ): Promise<DepartmentResponseDto> {
@@ -252,6 +285,13 @@ export class DepartmentsController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN', 'COMPANY_ADMIN', 'DIVISION_ADMIN', 'DEPARTMENT_ADMIN')
+  @ApiParam({
+    name: 'id',
+    description: 'Department ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Delete a department (soft delete)',
     description:
@@ -275,7 +315,7 @@ export class DepartmentsController {
     description: 'Department not found',
   })
   async remove(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<DeleteDepartmentResponseDto> {
     return this.departmentsService.remove(id, req.user.id, req.userRoles);

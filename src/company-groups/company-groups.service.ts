@@ -4,9 +4,10 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, In } from 'typeorm';
+import { Repository, IsNull, In, DataSource } from 'typeorm';
 import { CompanyGroup } from '../entities/company-group.entity';
 import { Company } from '../entities/company.entity';
 import { Division } from '../entities/division.entity';
@@ -19,6 +20,7 @@ import {
   CompanyGroupUserRowDto,
   PaginatedCompanyGroupUsersResponseDto,
 } from './dto/company-group-users-response.dto';
+import { UpdateCompanyGroupDto } from './dto/update-company-group.dto';
 
 @Injectable()
 export class CompanyGroupsService {
@@ -33,13 +35,9 @@ export class CompanyGroupsService {
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(UserInvite)
     private readonly userInviteRepository: Repository<UserInvite>,
+    private readonly dataSource: DataSource,
   ) {}
 
-  /**
-   * Get all company groups for a super admin
-   * @param superAdminId - Super admin user ID from JWT token
-   * @returns Array of company groups where user is super admin
-   */
   async findAllBySuperAdmin(superAdminId: string): Promise<CompanyGroupResponseDto[]> {
     try {
       const companyGroups = await this.companyGroupRepository.find({
@@ -65,9 +63,6 @@ export class CompanyGroupsService {
     }
   }
 
-  /**
-   * Get users across companies with scoped access based on highest admin role.
-   */
   async getCompanyGroupUsers(
     userId: string,
     userRoles: string[] = [],
@@ -356,11 +351,111 @@ export class CompanyGroupsService {
     }
   }
 
-  /**
-   * Map CompanyGroup entity to CompanyGroupResponseDto
-   * @param companyGroup - CompanyGroup entity
-   * @returns CompanyGroupResponseDto
-   */
+  async update(
+    companyGroupId: string,
+    userId: string,
+    userRoles: string[] = [],
+    updateDto: UpdateCompanyGroupDto,
+  ): Promise<CompanyGroupResponseDto> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const normalizedRoles = this.normalizeRoles(userRoles);
+      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+
+      if (!isGroupAdmin) {
+        throw new ForbiddenException('Only GROUP_ADMIN can update company group details');
+      }
+
+      const companyGroup = await queryRunner.manager.findOne(CompanyGroup, {
+        where: { id: companyGroupId, deleted_at: IsNull() },
+      });
+
+      if (!companyGroup) {
+        throw new NotFoundException(`Company group with ID ${companyGroupId} not found`);
+      }
+
+      if (companyGroup.company_group_admin_id !== userId) {
+        throw new ForbiddenException(
+          'Access denied. You can only update company groups where you are the admin.',
+        );
+      }
+
+      if (!companyGroup.is_active) {
+        throw new ForbiddenException('Company group is not active');
+      }
+
+      const hasUpdates =
+        updateDto.name !== undefined ||
+        updateDto.email !== undefined ||
+        updateDto.phone !== undefined ||
+        updateDto.address !== undefined ||
+        updateDto.city !== undefined ||
+        updateDto.state !== undefined;
+
+      if (!hasUpdates) {
+        throw new BadRequestException('No valid fields provided for update');
+      }
+
+      if (updateDto.name !== undefined) {
+        companyGroup.name = updateDto.name;
+      }
+
+      const currentMetadata = companyGroup.metadata || {};
+      const updatedMetadata: Record<string, unknown> = { ...currentMetadata };
+
+      if (updateDto.email !== undefined) {
+        updatedMetadata.email = updateDto.email;
+      }
+      if (updateDto.phone !== undefined) {
+        updatedMetadata.phone = updateDto.phone;
+      }
+      if (updateDto.address !== undefined) {
+        updatedMetadata.address = updateDto.address;
+      }
+      if (updateDto.city !== undefined) {
+        updatedMetadata.city = updateDto.city;
+      }
+      if (updateDto.state !== undefined) {
+        updatedMetadata.state = updateDto.state;
+      }
+
+      companyGroup.metadata = updatedMetadata;
+      companyGroup.updated_by = userId;
+
+      const savedCompanyGroup = await queryRunner.manager.save(CompanyGroup, companyGroup);
+
+      await queryRunner.commitTransaction();
+      await queryRunner.release();
+
+      this.logger.log(
+        `Company group ${savedCompanyGroup.id} updated successfully by user ${userId}`,
+      );
+
+      return this.mapToResponseDto(savedCompanyGroup);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      await queryRunner.release();
+
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to update company group: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new InternalServerErrorException('Failed to update company group');
+    }
+  }
+
   private mapToResponseDto(companyGroup: CompanyGroup): CompanyGroupResponseDto {
     return {
       id: companyGroup.id,
@@ -375,7 +470,9 @@ export class CompanyGroupsService {
   }
 
   private normalizeRoles(userRoles: string[] = []): string[] {
-    return Array.isArray(userRoles) ? userRoles : [];
+    return userRoles
+      .filter((role): role is string => typeof role === 'string' && role.length > 0)
+      .map((role) => role.toUpperCase().trim());
   }
 
   private getHighestRole(

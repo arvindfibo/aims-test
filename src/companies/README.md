@@ -65,7 +65,7 @@ Production-ready company APIs with role-based access control. `GROUP_ADMIN` user
   "state": "Maharashtra",
   "country": "India",
   "pincode": "400001",
-  "company_admin_user_id": "123e4567-e89b-12d3-a456-426614174000",
+  "company_admin_id": "123e4567-e89b-12d3-a456-426614174000",
   "is_active": true
 }
 ```
@@ -93,7 +93,7 @@ Production-ready company APIs with role-based access control. `GROUP_ADMIN` user
   "pincode": "400001",
   "is_active": true,
   "is_verified": false,
-  "company_admin_user_id": "123e4567-e89b-12d3-a456-426614174000",
+  "company_admin_id": "123e4567-e89b-12d3-a456-426614174000",
   "created_at": "2024-01-01T00:00:00.000Z",
   "updated_at": "2024-01-01T00:00:00.000Z"
 }

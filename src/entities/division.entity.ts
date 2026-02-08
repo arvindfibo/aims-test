@@ -34,7 +34,7 @@ export class Division {
   is_active: boolean;
 
   @Column({ type: 'uuid', nullable: true })
-  division_admin_user_id: string | null;
+  division_admin_id: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, unknown> | null;
@@ -50,7 +50,7 @@ export class Division {
   company: Company;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'division_admin_user_id' })
+  @JoinColumn({ name: 'division_admin_id' })
   division_admin: User | null;
 
   @ManyToOne(() => User)

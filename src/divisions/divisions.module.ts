@@ -7,11 +7,12 @@ import { Company } from '../entities/company.entity';
 import { CompanyGroup } from '../entities/company-group.entity';
 import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
+import { Department } from '../entities/department.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Division, Company, CompanyGroup, Role, UserRole]),
+    TypeOrmModule.forFeature([Division, Company, CompanyGroup, Role, UserRole, Department]),
     AuthModule, // Import AuthModule to get access to RolesGuard and its dependencies
   ],
   controllers: [DivisionsController],

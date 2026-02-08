@@ -3,11 +3,12 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
   Logger,
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, IsNull } from 'typeorm';
 import { Tender, Currency } from '../entities/tender.entity';
 import { Company } from '../entities/company.entity';
 import { CreateTenderDto, TenderResponseDto } from './dto/create-tender.dto';
@@ -34,10 +35,15 @@ export class TendersService {
     await queryRunner.startTransaction();
 
     try {
-      // Verify company exists and is active
-      const company = await queryRunner.manager.findOne(Company, {
-        where: { id: createTenderDto.company_id },
-      });
+      const [company, existingTender] = await Promise.all([
+        queryRunner.manager.findOne(Company, {
+          where: { id: createTenderDto.company_id, deleted_at: IsNull() },
+        }),
+        queryRunner.manager.findOne(Tender, {
+          where: { tender_code: createTenderDto.tender_code },
+          withDeleted: true,
+        }),
+      ]);
 
       if (!company) {
         throw new NotFoundException(`Company with ID ${createTenderDto.company_id} not found`);
@@ -47,19 +53,12 @@ export class TendersService {
         throw new ForbiddenException('Company is not active');
       }
 
-      // Check if tender code already exists
-      const existingTender = await queryRunner.manager.findOne(Tender, {
-        where: { tender_code: createTenderDto.tender_code },
-        withDeleted: true,
-      });
-
       if (existingTender) {
         throw new ConflictException(
           `Tender with code "${createTenderDto.tender_code}" already exists`,
         );
       }
 
-      // Create tender entity
       const tender = queryRunner.manager.create(Tender, {
         company_id: createTenderDto.company_id,
         tender_code: createTenderDto.tender_code,
@@ -92,26 +91,36 @@ export class TendersService {
       });
 
       const savedTender = await queryRunner.manager.save(Tender, tender);
-
       await queryRunner.commitTransaction();
 
-      // Fetch the complete tender with relations
       const tenderWithRelations = await this.tenderRepository.findOne({
         where: { id: savedTender.id },
         relations: ['company'],
       });
 
       if (!tenderWithRelations) {
-        throw new NotFoundException('Tender not found after creation');
+        throw new InternalServerErrorException('Tender not found after creation');
       }
+
+      this.logger.log(`Tender "${savedTender.tender_code}" created successfully by user ${userId}`);
 
       return this.mapToResponseDto(tenderWithRelations);
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`Error creating tender: ${errorMessage}`, errorStack);
-      throw error;
+
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to create tender: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException('Failed to create tender');
     } finally {
       await queryRunner.release();
     }
@@ -155,8 +164,6 @@ export class TendersService {
       const qb = this.tenderRepository.createQueryBuilder('tender');
       qb.leftJoinAndSelect('tender.company', 'company');
       qb.where('tender.deleted_at IS NULL');
-
-      // Apply filters dynamically
       if (id) {
         qb.andWhere('tender.id = :id', { id });
       }
@@ -244,10 +251,7 @@ export class TendersService {
         qb.andWhere('tender.updated_at <= :updated_at_to', { updated_at_to });
       }
 
-      // Get total count before applying ordering and pagination
       const total = await qb.getCount();
-
-      // Apply sorting
       const sortFieldMap: Record<string, string> = {
         tender_code: 'tender.tender_code',
         authority: 'tender.authority',
@@ -272,18 +276,11 @@ export class TendersService {
       const sortOrder = sort_order === 'ASC' ? 'ASC' : 'DESC';
       qb.orderBy(sortBy, sortOrder);
 
-      // Apply pagination
       const safeLimit = Math.min(Math.max(limit ?? 10, 1), 100);
       const safeOffset = Math.max(offset ?? 0, 0);
       qb.skip(safeOffset).take(safeLimit);
 
       const tenders = await qb.getMany();
-
-      const hasMore = safeOffset + tenders.length < total;
-
-      this.logger.log(
-        `Found ${tenders.length} tenders (offset: ${safeOffset}, limit: ${safeLimit}, total: ${total}, sortBy: ${sortBy}, sortOrder: ${sortOrder})`,
-      );
 
       return {
         data: tenders.map((tender) => this.mapToResponseDto(tender)),
@@ -291,20 +288,21 @@ export class TendersService {
           total,
           offset: safeOffset,
           limit: safeLimit,
-          hasMore,
+          hasMore: safeOffset + tenders.length < total,
         },
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`Error fetching tenders: ${errorMessage}`, errorStack);
+      this.logger.error(
+        `Failed to fetch tenders: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new BadRequestException('Failed to fetch tenders');
     }
   }
 
   async findOne(id: string): Promise<TenderResponseDto> {
     const tender = await this.tenderRepository.findOne({
-      where: { id },
+      where: { id, deleted_at: IsNull() },
       relations: ['company'],
     });
 
@@ -326,17 +324,16 @@ export class TendersService {
 
     try {
       const tender = await queryRunner.manager.findOne(Tender, {
-        where: { id },
+        where: { id, deleted_at: IsNull() },
       });
 
       if (!tender) {
         throw new NotFoundException(`Tender with ID ${id} not found`);
       }
 
-      // Check if tender code is being updated and if it conflicts
       if (updateTenderDto.tender_code && updateTenderDto.tender_code !== tender.tender_code) {
         const existingTender = await queryRunner.manager.findOne(Tender, {
-          where: { tender_code: updateTenderDto.tender_code },
+          where: { tender_code: updateTenderDto.tender_code, deleted_at: IsNull() },
         });
 
         if (existingTender) {
@@ -346,111 +343,120 @@ export class TendersService {
         }
       }
 
-      // Update fields
-      if (updateTenderDto.tender_code !== undefined) {
-        tender.tender_code = updateTenderDto.tender_code;
-      }
-      if (updateTenderDto.authority !== undefined) {
-        tender.authority = updateTenderDto.authority;
-      }
-      if (updateTenderDto.client_name !== undefined) {
-        tender.client_name = updateTenderDto.client_name;
-      }
-      if (updateTenderDto.nit_number !== undefined) {
-        tender.nit_number = updateTenderDto.nit_number;
-      }
-      if (updateTenderDto.misc_charges !== undefined) {
-        tender.misc_charges = updateTenderDto.misc_charges;
-      }
-      if (updateTenderDto.name_of_work !== undefined) {
-        tender.name_of_work = updateTenderDto.name_of_work;
-      }
+      const updateData: Partial<Tender> = {
+        ...(updateTenderDto.tender_code !== undefined && {
+          tender_code: updateTenderDto.tender_code,
+        }),
+        ...(updateTenderDto.authority !== undefined && { authority: updateTenderDto.authority }),
+        ...(updateTenderDto.client_name !== undefined && {
+          client_name: updateTenderDto.client_name,
+        }),
+        ...(updateTenderDto.nit_number !== undefined && {
+          nit_number: updateTenderDto.nit_number,
+        }),
+        ...(updateTenderDto.misc_charges !== undefined && {
+          misc_charges: updateTenderDto.misc_charges,
+        }),
+        ...(updateTenderDto.name_of_work !== undefined && {
+          name_of_work: updateTenderDto.name_of_work,
+        }),
+        ...(updateTenderDto.tender_cost !== undefined && {
+          tender_cost: updateTenderDto.tender_cost.value ?? null,
+          tender_cost_currency: updateTenderDto.tender_cost.currency ?? Currency.INR,
+        }),
+        ...(updateTenderDto.processing_fee !== undefined && {
+          processing_fee: updateTenderDto.processing_fee.value ?? null,
+          processing_fee_currency: updateTenderDto.processing_fee.currency ?? Currency.INR,
+        }),
+        ...(updateTenderDto.emd !== undefined && {
+          emd: updateTenderDto.emd.value ?? null,
+          emd_currency: updateTenderDto.emd.currency ?? Currency.INR,
+        }),
+        ...(updateTenderDto.bank_charges !== undefined && {
+          bank_charges: updateTenderDto.bank_charges.value ?? null,
+          bank_charges_currency: updateTenderDto.bank_charges.currency ?? Currency.INR,
+        }),
+        ...(updateTenderDto.documentation_charges !== undefined && {
+          documentation_charges: updateTenderDto.documentation_charges.value ?? null,
+          documentation_charges_currency:
+            updateTenderDto.documentation_charges.currency ?? Currency.INR,
+        }),
+        ...(updateTenderDto.total_tender_value !== undefined && {
+          total_tender_value: updateTenderDto.total_tender_value.value ?? null,
+          total_tender_value_currency: updateTenderDto.total_tender_value.currency ?? Currency.INR,
+        }),
+        ...(updateTenderDto.last_date_of_submission !== undefined && {
+          last_date_of_submission: updateTenderDto.last_date_of_submission
+            ? new Date(updateTenderDto.last_date_of_submission)
+            : null,
+        }),
+        ...(updateTenderDto.mode_of_emd !== undefined && {
+          mode_of_emd: updateTenderDto.mode_of_emd,
+        }),
+        ...(updateTenderDto.tender_status !== undefined && {
+          tender_status: updateTenderDto.tender_status,
+        }),
+        ...(updateTenderDto.emd_status !== undefined && {
+          emd_status: updateTenderDto.emd_status,
+        }),
+        ...(updateTenderDto.emd_returned !== undefined && {
+          emd_returned: updateTenderDto.emd_returned,
+        }),
+        updated_by: userId,
+      };
 
-      // Update financial fields
-      if (updateTenderDto.tender_cost !== undefined) {
-        tender.tender_cost = updateTenderDto.tender_cost.value ?? null;
-        tender.tender_cost_currency = updateTenderDto.tender_cost.currency ?? Currency.INR;
-      }
-      if (updateTenderDto.processing_fee !== undefined) {
-        tender.processing_fee = updateTenderDto.processing_fee.value ?? null;
-        tender.processing_fee_currency = updateTenderDto.processing_fee.currency ?? Currency.INR;
-      }
-      if (updateTenderDto.emd !== undefined) {
-        tender.emd = updateTenderDto.emd.value ?? null;
-        tender.emd_currency = updateTenderDto.emd.currency ?? Currency.INR;
-      }
-      if (updateTenderDto.bank_charges !== undefined) {
-        tender.bank_charges = updateTenderDto.bank_charges.value ?? null;
-        tender.bank_charges_currency = updateTenderDto.bank_charges.currency ?? Currency.INR;
-      }
-      if (updateTenderDto.documentation_charges !== undefined) {
-        tender.documentation_charges = updateTenderDto.documentation_charges.value ?? null;
-        tender.documentation_charges_currency =
-          updateTenderDto.documentation_charges.currency ?? Currency.INR;
-      }
-      if (updateTenderDto.total_tender_value !== undefined) {
-        tender.total_tender_value = updateTenderDto.total_tender_value.value ?? null;
-        tender.total_tender_value_currency =
-          updateTenderDto.total_tender_value.currency ?? Currency.INR;
-      }
-
-      // Update other fields
-      if (updateTenderDto.last_date_of_submission !== undefined) {
-        tender.last_date_of_submission = updateTenderDto.last_date_of_submission
-          ? new Date(updateTenderDto.last_date_of_submission)
-          : null;
-      }
-      if (updateTenderDto.mode_of_emd !== undefined) {
-        tender.mode_of_emd = updateTenderDto.mode_of_emd;
-      }
-      if (updateTenderDto.tender_status !== undefined) {
-        tender.tender_status = updateTenderDto.tender_status;
-      }
-      if (updateTenderDto.emd_status !== undefined) {
-        tender.emd_status = updateTenderDto.emd_status;
-      }
-      if (updateTenderDto.emd_returned !== undefined) {
-        tender.emd_returned = updateTenderDto.emd_returned;
-      }
-
-      tender.updated_by = userId;
+      Object.assign(tender, updateData);
 
       const updatedTender = await queryRunner.manager.save(Tender, tender);
       await queryRunner.commitTransaction();
 
-      // Fetch the complete tender with relations
       const tenderWithRelations = await this.tenderRepository.findOne({
         where: { id: updatedTender.id },
         relations: ['company'],
       });
 
       if (!tenderWithRelations) {
-        throw new NotFoundException('Tender not found after update');
+        throw new InternalServerErrorException('Tender not found after update');
       }
+
+      this.logger.log(
+        `Tender "${updatedTender.tender_code}" updated successfully by user ${userId}`,
+      );
 
       return this.mapToResponseDto(tenderWithRelations);
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`Error updating tender: ${errorMessage}`, errorStack);
-      throw error;
+
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to update tender: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException('Failed to update tender');
     } finally {
       await queryRunner.release();
     }
   }
 
-  async remove(id: string): Promise<DeleteTenderResponseDto> {
+  async remove(id: string, userId: string): Promise<DeleteTenderResponseDto> {
     const tender = await this.tenderRepository.findOne({
-      where: { id },
+      where: { id, deleted_at: IsNull() },
     });
 
     if (!tender) {
       throw new NotFoundException(`Tender with ID ${id} not found`);
     }
 
-    // Soft delete
     await this.tenderRepository.softDelete(id);
+
+    this.logger.log(`Tender "${tender.tender_code}" deleted successfully by user ${userId}`);
 
     return {
       message: 'Tender deleted successfully',

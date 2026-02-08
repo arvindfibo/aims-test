@@ -8,10 +8,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Not, IsNull, ILike } from 'typeorm';
+import { Repository, DataSource, Not, IsNull } from 'typeorm';
 import { Department } from '../entities/department.entity';
 import { Division } from '../entities/division.entity';
 import { Company } from '../entities/company.entity';
+import { UserRole } from '../entities/user-role.entity';
 import { CreateDepartmentDto, DepartmentResponseDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { DeleteDepartmentResponseDto } from './dto/delete-department.dto';
@@ -29,6 +30,8 @@ export class DepartmentsService {
     private readonly divisionRepository: Repository<Division>,
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -42,7 +45,6 @@ export class DepartmentsService {
     await queryRunner.startTransaction();
 
     try {
-      // Verify division exists and is active
       const division = await queryRunner.manager.findOne(Division, {
         where: { id: createDepartmentDto.division_id, deleted_at: IsNull() },
         relations: ['company'],
@@ -54,15 +56,15 @@ export class DepartmentsService {
         );
       }
 
-      // Verify division is active
       if (!division.is_active) {
         throw new ForbiddenException('Division is not active');
       }
 
-      // Get company for authorization check
-      const company = await queryRunner.manager.findOne(Company, {
-        where: { id: division.company_id },
-      });
+      const company =
+        division.company ||
+        (await queryRunner.manager.findOne(Company, {
+          where: { id: division.company_id },
+        }));
 
       if (!company) {
         throw new NotFoundException(`Company with ID ${division.company_id} not found`);
@@ -72,13 +74,12 @@ export class DepartmentsService {
         throw new ForbiddenException('Company is not active');
       }
 
-      // Authorization check
       const normalizedRoles = Array.isArray(userRoles) ? userRoles : [];
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
-      const isCompanyAdmin =
-        normalizedRoles.includes('COMPANY_ADMIN') && company.company_admin_user_id === userId;
+      const roleSet = new Set(normalizedRoles);
+      const isGroupAdmin = roleSet.has('GROUP_ADMIN');
+      const isCompanyAdmin = roleSet.has('COMPANY_ADMIN') && company.company_admin_id === userId;
       const isDivisionAdmin =
-        normalizedRoles.includes('DIVISION_ADMIN') && division.division_admin_user_id === userId;
+        roleSet.has('DIVISION_ADMIN') && division.division_admin_id === userId;
 
       if (!isGroupAdmin && !isCompanyAdmin && !isDivisionAdmin) {
         throw new ForbiddenException(
@@ -86,56 +87,49 @@ export class DepartmentsService {
         );
       }
 
-      // Check if department name already exists in the same division
-      const existingDepartmentByName = await queryRunner.manager.findOne(Department, {
-        where: {
-          division_id: createDepartmentDto.division_id,
-          name: createDepartmentDto.name,
-          deleted_at: IsNull(),
-        },
-      });
+      const uniquenessChecks = await Promise.all([
+        queryRunner.manager.findOne(Department, {
+          where: {
+            division_id: createDepartmentDto.division_id,
+            name: createDepartmentDto.name,
+            deleted_at: IsNull(),
+          },
+        }),
+        createDepartmentDto.code
+          ? queryRunner.manager.findOne(Department, {
+              where: {
+                division_id: createDepartmentDto.division_id,
+                code: createDepartmentDto.code,
+                deleted_at: IsNull(),
+              },
+            })
+          : Promise.resolve(null),
+      ]);
 
-      if (existingDepartmentByName) {
+      if (uniquenessChecks[0]) {
         throw new ConflictException(
           `Department with name "${createDepartmentDto.name}" already exists in this division`,
         );
       }
 
-      // Check if department code already exists in the same division (if provided)
-      if (createDepartmentDto.code) {
-        const existingDepartmentByCode = await queryRunner.manager.findOne(Department, {
-          where: {
-            division_id: createDepartmentDto.division_id,
-            code: createDepartmentDto.code,
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (existingDepartmentByCode) {
-          throw new ConflictException(
-            `Department with code "${createDepartmentDto.code}" already exists in this division`,
-          );
-        }
+      if (uniquenessChecks[1]) {
+        throw new ConflictException(
+          `Department with code "${createDepartmentDto.code}" already exists in this division`,
+        );
       }
 
-      // Create department entity
-      const department = this.departmentRepository.create({
+      const department = queryRunner.manager.create(Department, {
         division_id: createDepartmentDto.division_id,
         name: createDepartmentDto.name,
         code: createDepartmentDto.code || null,
         description: createDepartmentDto.description || null,
         is_active: createDepartmentDto.is_active ?? true,
-        department_admin_user_id: createDepartmentDto.department_admin_user_id || null,
+        department_admin_id: createDepartmentDto.department_admin_id || null,
         created_by: userId,
         updated_by: userId,
       });
 
       const savedDepartment = await queryRunner.manager.save(Department, department);
-
-      if (!savedDepartment) {
-        throw new InternalServerErrorException('Failed to create department');
-      }
-
       await queryRunner.commitTransaction();
 
       this.logger.log(
@@ -156,6 +150,7 @@ export class DepartmentsService {
 
       this.logger.error(
         `Failed to create department: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw new InternalServerErrorException('Failed to create department');
     } finally {
@@ -173,14 +168,21 @@ export class DepartmentsService {
       throw new NotFoundException(`Department with ID ${departmentId} not found`);
     }
 
-    return this.mapToResponseDto(department);
+    const usersCount = await this.userRoleRepository
+      .createQueryBuilder('ur')
+      .select('COUNT(DISTINCT ur.user_id)', 'count')
+      .where('ur.department_id = :departmentId', { departmentId })
+      .andWhere('ur.deleted_at IS NULL')
+      .getRawOne()
+      .then((result: { count: string } | undefined) => parseInt(result?.count || '0', 10));
+
+    return this.mapToResponseDto(department, usersCount);
   }
 
   async findAllByDivision(
     divisionId: string,
     query: ListDepartmentsQueryDto,
   ): Promise<PaginatedDepartmentsResponseDto> {
-    // Verify division exists
     const division = await this.divisionRepository.findOne({
       where: { id: divisionId, deleted_at: IsNull() },
     });
@@ -194,37 +196,44 @@ export class DepartmentsService {
     const sortBy = query.sort_by ?? 'created_at';
     const sortOrder = query.sort_order === 'ASC' ? 'ASC' : 'DESC';
 
-    const where: Record<string, unknown> = {
-      division_id: divisionId,
-      deleted_at: IsNull(),
-    };
+    const qb = this.departmentRepository.createQueryBuilder('department');
+    qb.where('department.division_id = :divisionId', { divisionId });
+    qb.andWhere('department.deleted_at IS NULL');
+
     if (query.name?.trim()) {
-      where.name = ILike(`%${query.name.trim()}%`);
+      qb.andWhere('department.name ILIKE :name', { name: `%${query.name.trim()}%` });
     }
+
     if (query.code?.trim()) {
-      where.code = ILike(`%${query.code.trim()}%`);
+      qb.andWhere('department.code ILIKE :code', { code: `%${query.code.trim()}%` });
     }
+
     if (query.is_active !== undefined) {
-      where.is_active = query.is_active;
+      qb.andWhere('department.is_active = :isActive', { isActive: query.is_active });
     }
 
-    const [departments, total] = await this.departmentRepository.findAndCount({
-      where,
-      order: { [sortBy]: sortOrder },
-      skip: safeOffset,
-      take: safeLimit,
-    });
+    const sortFieldMap: Record<string, string> = {
+      name: 'department.name',
+      code: 'department.code',
+      is_active: 'department.is_active',
+      created_at: 'department.created_at',
+      updated_at: 'department.updated_at',
+    };
 
-    const data = departments.map((department) => this.mapToResponseDto(department));
-    const hasMore = safeOffset + departments.length < total;
+    const sortField = sortFieldMap[sortBy] || 'department.created_at';
+    qb.orderBy(sortField, sortOrder);
+    qb.skip(safeOffset);
+    qb.take(safeLimit);
+
+    const [departments, total] = await qb.getManyAndCount();
 
     return {
-      data,
+      data: departments.map((department) => this.mapToResponseDto(department)),
       pagination: {
         total,
         offset: safeOffset,
         limit: safeLimit,
-        hasMore,
+        hasMore: safeOffset + departments.length < total,
       },
     };
   }
@@ -249,7 +258,6 @@ export class DepartmentsService {
         throw new NotFoundException(`Department with ID ${departmentId} not found`);
       }
 
-      // Get division and company for authorization check
       const division = await queryRunner.manager.findOne(Division, {
         where: { id: department.division_id },
         relations: ['company'],
@@ -263,9 +271,11 @@ export class DepartmentsService {
         throw new ForbiddenException('Division is not active');
       }
 
-      const company = await queryRunner.manager.findOne(Company, {
-        where: { id: division.company_id },
-      });
+      const company =
+        division.company ||
+        (await queryRunner.manager.findOne(Company, {
+          where: { id: division.company_id },
+        }));
 
       if (!company) {
         throw new NotFoundException(`Company with ID ${division.company_id} not found`);
@@ -275,16 +285,14 @@ export class DepartmentsService {
         throw new ForbiddenException('Company is not active');
       }
 
-      // Authorization check
       const normalizedRoles = Array.isArray(userRoles) ? userRoles : [];
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
-      const isCompanyAdmin =
-        normalizedRoles.includes('COMPANY_ADMIN') && company.company_admin_user_id === userId;
+      const roleSet = new Set(normalizedRoles);
+      const isGroupAdmin = roleSet.has('GROUP_ADMIN');
+      const isCompanyAdmin = roleSet.has('COMPANY_ADMIN') && company.company_admin_id === userId;
       const isDivisionAdmin =
-        normalizedRoles.includes('DIVISION_ADMIN') && division.division_admin_user_id === userId;
+        roleSet.has('DIVISION_ADMIN') && division.division_admin_id === userId;
       const isDepartmentAdmin =
-        normalizedRoles.includes('DEPARTMENT_ADMIN') &&
-        department.department_admin_user_id === userId;
+        roleSet.has('DEPARTMENT_ADMIN') && department.department_admin_id === userId;
 
       if (!isGroupAdmin && !isCompanyAdmin && !isDivisionAdmin && !isDepartmentAdmin) {
         throw new ForbiddenException('Access denied to update this department');
@@ -294,83 +302,67 @@ export class DepartmentsService {
         'name',
         'code',
         'description',
-        'department_admin_user_id',
+        'department_admin_id',
         'is_active',
       ];
 
-      const hasUpdates = updatableFields.some(
-        (field) => typeof updateDepartmentDto[field] !== 'undefined',
-      );
+      const hasUpdates = updatableFields.some((field) => updateDepartmentDto[field] !== undefined);
 
       if (!hasUpdates) {
         throw new BadRequestException('No valid fields provided for update');
       }
 
-      // Check for duplicate name if updating name
-      if (updateDepartmentDto.name !== undefined) {
-        const existingDepartment = await queryRunner.manager.findOne(Department, {
-          where: {
-            division_id: department.division_id,
-            name: updateDepartmentDto.name,
-            id: Not(department.id),
-            deleted_at: IsNull(),
-          },
-        });
+      const uniquenessChecks = await Promise.all([
+        updateDepartmentDto.name !== undefined
+          ? queryRunner.manager.findOne(Department, {
+              where: {
+                division_id: department.division_id,
+                name: updateDepartmentDto.name,
+                id: Not(department.id),
+                deleted_at: IsNull(),
+              },
+            })
+          : Promise.resolve(null),
+        updateDepartmentDto.code !== undefined && updateDepartmentDto.code
+          ? queryRunner.manager.findOne(Department, {
+              where: {
+                division_id: department.division_id,
+                code: updateDepartmentDto.code,
+                id: Not(department.id),
+                deleted_at: IsNull(),
+              },
+            })
+          : Promise.resolve(null),
+      ]);
 
-        if (existingDepartment) {
-          throw new ConflictException(
-            `Department with name "${updateDepartmentDto.name}" already exists in this division`,
-          );
-        }
+      if (uniquenessChecks[0]) {
+        throw new ConflictException(
+          `Department with name "${updateDepartmentDto.name}" already exists in this division`,
+        );
       }
 
-      // Check for duplicate code if updating code
-      if (updateDepartmentDto.code !== undefined && updateDepartmentDto.code) {
-        const existingDepartment = await queryRunner.manager.findOne(Department, {
-          where: {
-            division_id: department.division_id,
-            code: updateDepartmentDto.code,
-            id: Not(department.id),
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (existingDepartment) {
-          throw new ConflictException(
-            `Department with code "${updateDepartmentDto.code}" already exists in this division`,
-          );
-        }
+      if (uniquenessChecks[1]) {
+        throw new ConflictException(
+          `Department with code "${updateDepartmentDto.code}" already exists in this division`,
+        );
       }
 
-      // Update fields
-      if (updateDepartmentDto.name !== undefined) {
-        department.name = updateDepartmentDto.name;
-      }
-
-      if (updateDepartmentDto.code !== undefined) {
-        department.code = updateDepartmentDto.code || null;
-      }
-
-      if (updateDepartmentDto.description !== undefined) {
-        department.description = updateDepartmentDto.description || null;
-      }
-
-      if (updateDepartmentDto.department_admin_user_id !== undefined) {
-        department.department_admin_user_id = updateDepartmentDto.department_admin_user_id || null;
-      }
-
-      if (updateDepartmentDto.is_active !== undefined) {
-        department.is_active = updateDepartmentDto.is_active;
-      }
-
-      department.updated_by = userId;
+      Object.assign(department, {
+        ...(updateDepartmentDto.name !== undefined && { name: updateDepartmentDto.name }),
+        ...(updateDepartmentDto.code !== undefined && { code: updateDepartmentDto.code || null }),
+        ...(updateDepartmentDto.description !== undefined && {
+          description: updateDepartmentDto.description || null,
+        }),
+        ...(updateDepartmentDto.department_admin_id !== undefined && {
+          department_admin_id: updateDepartmentDto.department_admin_id || null,
+        }),
+        ...(updateDepartmentDto.is_active !== undefined && {
+          is_active: updateDepartmentDto.is_active,
+        }),
+        updated_by: userId,
+      });
 
       const savedDepartment = await queryRunner.manager.save(Department, department);
-
-      if (!savedDepartment) {
-        throw new InternalServerErrorException('Failed to update department');
-      }
-
       await queryRunner.commitTransaction();
 
       this.logger.log(
@@ -392,6 +384,7 @@ export class DepartmentsService {
 
       this.logger.error(
         `Failed to update department: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw new InternalServerErrorException('Failed to update department');
     } finally {
@@ -418,24 +411,24 @@ export class DepartmentsService {
         throw new NotFoundException(`Department with ID ${departmentId} not found`);
       }
 
-      // Get division and company for authorization check
       const division = await queryRunner.manager.findOne(Division, {
         where: { id: department.division_id },
+        relations: ['company'],
       });
 
       if (!division) {
         throw new NotFoundException(`Division with ID ${department.division_id} not found`);
       }
 
-      const company = await queryRunner.manager.findOne(Company, {
-        where: { id: division.company_id },
-      });
+      const companyForAuth =
+        division.company ||
+        (await queryRunner.manager.findOne(Company, { where: { id: division.company_id } }));
 
-      if (!company) {
+      if (!companyForAuth) {
         throw new NotFoundException(`Company with ID ${division.company_id} not found`);
       }
 
-      if (!company.is_active) {
+      if (!companyForAuth.is_active) {
         throw new ForbiddenException('Company is not active');
       }
 
@@ -443,32 +436,27 @@ export class DepartmentsService {
         throw new ForbiddenException('Division is not active');
       }
 
-      // Authorization check
       const normalizedRoles = Array.isArray(userRoles) ? userRoles : [];
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+      const roleSet = new Set(normalizedRoles);
+      const isGroupAdmin = roleSet.has('GROUP_ADMIN');
       const isCompanyAdmin =
-        normalizedRoles.includes('COMPANY_ADMIN') && company.company_admin_user_id === userId;
+        roleSet.has('COMPANY_ADMIN') && companyForAuth.company_admin_id === userId;
       const isDivisionAdmin =
-        normalizedRoles.includes('DIVISION_ADMIN') && division.division_admin_user_id === userId;
+        roleSet.has('DIVISION_ADMIN') && division.division_admin_id === userId;
       const isDepartmentAdmin =
-        normalizedRoles.includes('DEPARTMENT_ADMIN') &&
-        department.department_admin_user_id === userId;
+        roleSet.has('DEPARTMENT_ADMIN') && department.department_admin_id === userId;
 
       if (!isGroupAdmin && !isCompanyAdmin && !isDivisionAdmin && !isDepartmentAdmin) {
         throw new ForbiddenException('Access denied to delete this department');
       }
 
-      // Soft delete
-      department.deleted_at = new Date();
-      department.updated_by = userId;
-      department.is_active = false;
+      Object.assign(department, {
+        deleted_at: new Date(),
+        updated_by: userId,
+        is_active: false,
+      });
 
       const savedDepartment = await queryRunner.manager.save(Department, department);
-
-      if (!savedDepartment) {
-        throw new InternalServerErrorException('Failed to delete department');
-      }
-
       await queryRunner.commitTransaction();
 
       this.logger.log(
@@ -493,6 +481,7 @@ export class DepartmentsService {
 
       this.logger.error(
         `Failed to delete department: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw new InternalServerErrorException('Failed to delete department');
     } finally {
@@ -500,7 +489,7 @@ export class DepartmentsService {
     }
   }
 
-  private mapToResponseDto(department: Department): DepartmentResponseDto {
+  private mapToResponseDto(department: Department, usersCount: number = 0): DepartmentResponseDto {
     return {
       id: department.id,
       division_id: department.division_id,
@@ -508,9 +497,10 @@ export class DepartmentsService {
       code: department.code || undefined,
       description: department.description || undefined,
       is_active: department.is_active,
-      department_admin_user_id: department.department_admin_user_id || undefined,
+      department_admin_id: department.department_admin_id || undefined,
       created_at: department.created_at,
       updated_at: department.updated_at,
+      users_count: usersCount,
     };
   }
 }

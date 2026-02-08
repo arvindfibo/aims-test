@@ -670,7 +670,7 @@ export class ProjectsService {
     }
 
     const companies = await this.companyRepository.find({
-      where: { company_admin_user_id: userId, deleted_at: IsNull() },
+      where: { company_admin_id: userId, deleted_at: IsNull() },
       select: ['id'],
     });
 
@@ -719,7 +719,7 @@ export class ProjectsService {
       return tender;
     }
 
-    if (company.company_admin_user_id !== userId) {
+    if (company.company_admin_id !== userId) {
       throw new NotFoundException('Tender not found or access denied');
     }
 
@@ -757,7 +757,7 @@ export class ProjectsService {
       return tender;
     }
 
-    if (company.company_admin_user_id !== userId) {
+    if (company.company_admin_id !== userId) {
       throw new ForbiddenException('Access denied to modify this project');
     }
 

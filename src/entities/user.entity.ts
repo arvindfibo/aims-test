@@ -33,6 +33,9 @@ export class User {
   @Column({ type: 'boolean', default: false })
   is_verified: boolean;
 
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: Record<string, unknown> | null;
+
   @CreateDateColumn()
   created_at: Date;
 
