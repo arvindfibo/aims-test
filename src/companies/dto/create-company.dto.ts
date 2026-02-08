@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, ApiHideProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsUUID,
@@ -178,20 +178,12 @@ export class CreateCompanyDto {
   @MaxLength(10, { message: 'Pincode must not exceed 10 characters' })
   pincode?: string;
 
-  @ApiPropertyOptional({
-    description:
-      'Company admin user ID. Optional - can be set later when inviting users. If not provided, company admin can be assigned via user invitations.',
-    example: '123e4567-e89b-12d3-a456-426614174000',
-  })
+  @ApiHideProperty()
   @IsOptional()
   @IsUUID('4', { message: 'Company admin user ID must be a valid UUID' })
-  company_admin_user_id?: string;
+  company_admin_id?: string;
 
-  @ApiPropertyOptional({
-    description: 'Is company active',
-    example: true,
-    default: true,
-  })
+  @ApiHideProperty()
   @IsOptional()
   @IsBoolean({ message: 'is_active must be a boolean' })
   is_active?: boolean;
@@ -353,7 +345,7 @@ export class CompanyResponseDto {
   @ApiPropertyOptional({
     description: 'Company admin user ID',
   })
-  company_admin_user_id?: string;
+  company_admin_id?: string;
 
   @ApiProperty({
     description: 'Created at',
@@ -366,4 +358,25 @@ export class CompanyResponseDto {
     example: '2024-01-01T00:00:00.000Z',
   })
   updated_at: Date;
+
+  @ApiProperty({
+    description: 'Total number of distinct users in the company',
+    example: 50,
+    minimum: 0,
+  })
+  users_count: number;
+
+  @ApiProperty({
+    description: 'Total number of divisions in the company',
+    example: 5,
+    minimum: 0,
+  })
+  divisions_count: number;
+
+  @ApiProperty({
+    description: 'Total number of departments across all divisions in the company',
+    example: 20,
+    minimum: 0,
+  })
+  departments_count: number;
 }

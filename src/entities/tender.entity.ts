@@ -18,6 +18,7 @@ export enum TenderStatus {
   L1_WORK_ALLOTED = 'L-1(work alloted to Us)',
   L2 = 'L-2',
   L3 = 'L-3',
+  L4 = 'L-4',
   QUOTED = 'Quoted',
   SUBMITTED = 'Submitted',
   WON = 'Won',
@@ -66,38 +67,38 @@ export class Tender {
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, default: 0 })
   tender_cost: number | null;
 
-  @Column({ type: 'enum', enum: Currency, default: Currency.INR })
-  tender_cost_currency: Currency;
+  @Column({ type: 'varchar', length: 10, default: 'INR' })
+  tender_cost_currency: string;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, default: 0 })
   processing_fee: number | null;
 
-  @Column({ type: 'enum', enum: Currency, default: Currency.INR })
-  processing_fee_currency: Currency;
+  @Column({ type: 'varchar', length: 10, default: 'INR' })
+  processing_fee_currency: string;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, default: 0 })
   emd: number | null;
 
-  @Column({ type: 'enum', enum: Currency, default: Currency.INR })
-  emd_currency: Currency;
+  @Column({ type: 'varchar', length: 10, default: 'INR' })
+  emd_currency: string;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, default: 0 })
   bank_charges: number | null;
 
-  @Column({ type: 'enum', enum: Currency, default: Currency.INR })
-  bank_charges_currency: Currency;
+  @Column({ type: 'varchar', length: 10, default: 'INR' })
+  bank_charges_currency: string;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, default: 0 })
   documentation_charges: number | null;
 
-  @Column({ type: 'enum', enum: Currency, default: Currency.INR })
-  documentation_charges_currency: Currency;
+  @Column({ type: 'varchar', length: 10, default: 'INR' })
+  documentation_charges_currency: string;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true, default: 0 })
   total_tender_value: number | null;
 
-  @Column({ type: 'enum', enum: Currency, default: Currency.INR })
-  total_tender_value_currency: Currency;
+  @Column({ type: 'varchar', length: 10, default: 'INR' })
+  total_tender_value_currency: string;
 
   @Column({ type: 'timestamp', nullable: true })
   last_date_of_submission: Date | null;

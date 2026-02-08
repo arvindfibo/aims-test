@@ -1,18 +1,30 @@
 import {
   Controller,
   Get,
+  Patch,
   UseGuards,
   Request,
+  Body,
+  Param,
+  Query,
   HttpCode,
   HttpStatus,
-  Query,
   UsePipes,
   ValidationPipe,
+  ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { CompanyGroupsService } from './company-groups.service';
 import { CompanyGroupResponseDto } from './dto/company-group-response.dto';
+import { UpdateCompanyGroupDto } from './dto/update-company-group.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -61,7 +73,6 @@ export class CompanyGroupsController {
     description: 'Internal server error',
   })
   async findAll(@Request() req: AuthenticatedRequest): Promise<CompanyGroupResponseDto[]> {
-    // Extract super_admin_id from JWT token (user.id)
     return this.companyGroupsService.findAllBySuperAdmin(req.user.id);
   }
 
@@ -182,5 +193,61 @@ export class CompanyGroupsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<PaginatedCompanyGroupUsersResponseDto> {
     return this.companyGroupsService.getCompanyGroupUsers(req.user.id, req.userRoles ?? [], query);
+  }
+
+  @Patch(':id')
+  @Roles('GROUP_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiParam({
+    name: 'id',
+    description: 'Company group ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @ApiOperation({
+    summary: 'Update company group details',
+    description:
+      'Updates company group details including name, email, phone, address, city, and state. ' +
+      'Email, phone, address, city, and state are stored in the metadata JSONB field. ' +
+      'Only accessible by GROUP_ADMIN users who are the admin of the specified company group.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Company group updated successfully',
+    type: CompanyGroupResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - invalid input or no fields provided',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - user does not have required role or access',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Company group not found',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error',
+  })
+  async update(
+    @Param('id', ParseUUIDPipe) companyGroupId: string,
+    @Request() req: AuthenticatedRequest,
+    @Body() updateDto: UpdateCompanyGroupDto,
+  ): Promise<CompanyGroupResponseDto> {
+    return this.companyGroupsService.update(
+      companyGroupId,
+      req.user.id,
+      req.userRoles ?? [],
+      updateDto,
+    );
   }
 }

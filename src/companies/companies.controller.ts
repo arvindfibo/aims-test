@@ -13,11 +13,12 @@ import {
   HttpStatus,
   UsePipes,
   ValidationPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { CompaniesService } from './companies.service';
-import { CreateCompanyDto, CompanyResponseDto, CompanyType } from './dto/create-company.dto';
+import { CreateCompanyDto, CompanyResponseDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { DeleteCompanyResponseDto } from './dto/delete-company.dto';
 import { GetCompaniesQueryDto } from './dto/get-companies-query.dto';
@@ -53,11 +54,12 @@ export class CompaniesController {
   @ApiOperation({
     summary: 'Create a new company',
     description:
-      'Only GROUP_ADMIN can create companies. Creates a new company within a company group.',
+      'Only GROUP_ADMIN can create companies. Creates a new company within a company group. Returns company details with statistics (users_count, divisions_count, departments_count will be 0 for newly created companies).',
   })
   @ApiResponse({
     status: 201,
-    description: 'Company created successfully',
+    description:
+      'Company created successfully. Response includes statistics fields (counts will be 0 for new companies).',
     type: CompanyResponseDto,
   })
   @ApiResponse({
@@ -91,213 +93,100 @@ export class CompaniesController {
   @Get()
   @HttpCode(HttpStatus.OK)
   @Roles('GROUP_ADMIN')
-  @ApiQuery({
-    name: 'id',
-    required: false,
-    description: 'Filter by company ID',
-    type: String,
+  @ApiOperation({
+    summary: 'Get all companies by company group ID with pagination and filtering',
+    description:
+      'Returns paginated companies for a specific company group. Supports filtering by name, legal_name, registration_number, is_active, and is_verified. Default: 10 items per page, sorted by created_at DESC. Only GROUP_ADMIN can access this endpoint. Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
   })
   @ApiQuery({
     name: 'company_group_id',
-    required: false,
-    description: 'Filter by company group ID',
+    required: true,
+    description: 'Company group ID (required)',
     type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
   })
   @ApiQuery({
     name: 'name',
     required: false,
     description: 'Filter by company name (exact match)',
     type: String,
+    example: 'Acme Corporation',
   })
   @ApiQuery({
     name: 'legal_name',
     required: false,
     description: 'Filter by legal name (exact match)',
     type: String,
-  })
-  @ApiQuery({
-    name: 'company_type',
-    required: false,
-    description: 'Filter by company type',
-    enum: CompanyType,
+    example: 'Acme Corporation Private Limited',
   })
   @ApiQuery({
     name: 'registration_number',
     required: false,
     description: 'Filter by registration number (exact match)',
     type: String,
-  })
-  @ApiQuery({
-    name: 'pan',
-    required: false,
-    description: 'Filter by PAN (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'gstin',
-    required: false,
-    description: 'Filter by GSTIN (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'email',
-    required: false,
-    description: 'Filter by email (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'website',
-    required: false,
-    description: 'Filter by website (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'phone',
-    required: false,
-    description: 'Filter by phone (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'address_line1',
-    required: false,
-    description: 'Filter by address line 1 (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'address_line2',
-    required: false,
-    description: 'Filter by address line 2 (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'city',
-    required: false,
-    description: 'Filter by city (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'state',
-    required: false,
-    description: 'Filter by state (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'country',
-    required: false,
-    description: 'Filter by country (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'pincode',
-    required: false,
-    description: 'Filter by pincode (exact match)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'company_admin_user_id',
-    required: false,
-    description: 'Filter by company admin user ID',
-    type: String,
+    example: 'U12345AB2023PTC123456',
   })
   @ApiQuery({
     name: 'is_active',
     required: false,
-    description: 'Filter by is_active',
+    description: 'Filter by is_active status',
     type: Boolean,
+    example: true,
   })
   @ApiQuery({
     name: 'is_verified',
     required: false,
-    description: 'Filter by is_verified',
+    description: 'Filter by is_verified status',
     type: Boolean,
-  })
-  @ApiQuery({
-    name: 'created_by',
-    required: false,
-    description: 'Filter by created_by user ID',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'updated_by',
-    required: false,
-    description: 'Filter by updated_by user ID',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'created_at_from',
-    required: false,
-    description: 'Created at from (ISO datetime)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'created_at_to',
-    required: false,
-    description: 'Created at to (ISO datetime)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'updated_at_from',
-    required: false,
-    description: 'Updated at from (ISO datetime)',
-    type: String,
-  })
-  @ApiQuery({
-    name: 'updated_at_to',
-    required: false,
-    description: 'Updated at to (ISO datetime)',
-    type: String,
+    example: false,
   })
   @ApiQuery({
     name: 'sort_by',
     required: false,
-    description: 'Sort by field',
+    description:
+      'Sort by field. Allowed values: name, legal_name, registration_number, is_active, is_verified, created_at, updated_at. Default: created_at',
     enum: [
       'name',
       'legal_name',
-      'company_type',
       'registration_number',
-      'pan',
-      'gstin',
-      'email',
-      'website',
-      'phone',
-      'city',
-      'state',
-      'country',
-      'pincode',
       'is_active',
       'is_verified',
       'created_at',
       'updated_at',
     ],
+    example: 'created_at',
   })
   @ApiQuery({
     name: 'sort_order',
     required: false,
-    description: 'Sort order',
+    description: 'Sort order. Default: DESC',
     enum: ['ASC', 'DESC'],
+    example: 'DESC',
   })
   @ApiQuery({
     name: 'offset',
     required: false,
-    description: 'Offset for pagination',
+    description: 'Offset for pagination (default: 0)',
     type: Number,
+    example: 0,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
-    description: 'Limit for pagination (max 100)',
+    description: 'Limit for pagination (min: 1, max: 100, default: 10)',
     type: Number,
-  })
-  @ApiOperation({
-    summary: 'Get all companies in the group with pagination, filtering, and sorting',
-    description:
-      "Returns paginated companies within the authenticated group admin's company group. Supports filtering by all company fields, sorting by multiple fields, and offset-based pagination. Default: 10 items per page, sorted by created_at DESC. Only GROUP_ADMIN can access this endpoint.",
+    example: 10,
   })
   @ApiResponse({
     status: 200,
-    description: 'Paginated list of companies retrieved successfully',
+    description:
+      'Paginated list of companies retrieved successfully. Each company includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
     type: PaginatedCompaniesResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - company_group_id is required',
   })
   @ApiResponse({
     status: 401,
@@ -309,31 +198,31 @@ export class CompaniesController {
   })
   @ApiResponse({
     status: 404,
-    description: 'Company group not found for the user',
+    description: 'Company group not found',
   })
   @ApiResponse({
     status: 500,
     description: 'Internal server error',
   })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  async findAll(
-    @Query() query: GetCompaniesQueryDto,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<PaginatedCompaniesResponseDto> {
-    return this.companiesService.findAllByGroupAdmin(req.user.id, query);
+  async findAll(@Query() query: GetCompaniesQueryDto): Promise<PaginatedCompaniesResponseDto> {
+    if (!query.company_group_id) {
+      throw new BadRequestException('company_group_id is required');
+    }
+    return this.companiesService.findAllCompaniesByCompanyGroupId(query.company_group_id, query);
   }
 
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  @Roles('GROUP_ADMIN')
   @ApiOperation({
     summary: 'Get a company by ID',
     description:
-      "Returns a single company by its ID. Only GROUP_ADMIN can access this endpoint. The company must belong to the authenticated user's company group.",
+      'Returns a single company by its ID with statistics including total users, divisions, and departments count. Only GROUP_ADMIN can access this endpoint.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Company retrieved successfully',
+    description:
+      'Company retrieved successfully with statistics (users_count, divisions_count, departments_count)',
     type: CompanyResponseDto,
   })
   @ApiResponse({
@@ -342,21 +231,18 @@ export class CompaniesController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - user does not have GROUP_ADMIN role or company group is not active',
+    description: 'Forbidden - user does not have GROUP_ADMIN role',
   })
   @ApiResponse({
     status: 404,
-    description: "Company not found or does not belong to user's company group",
+    description: 'Company not found',
   })
   @ApiResponse({
     status: 500,
     description: 'Internal server error',
   })
-  async findOne(
-    @Param('id') id: string,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<CompanyResponseDto> {
-    return this.companiesService.findOneByGroupAdmin(id, req.user.id);
+  async findOne(@Param('id') id: string): Promise<CompanyResponseDto> {
+    return this.companiesService.findCompanyByCompanyId(id);
   }
 
   @Patch(':id')
@@ -365,11 +251,12 @@ export class CompaniesController {
   @ApiOperation({
     summary: 'Update a company',
     description:
-      'GROUP_ADMIN can update any company. COMPANY_ADMIN can update only their company. Company group ID cannot be changed.',
+      'GROUP_ADMIN can update any company. COMPANY_ADMIN can update only their company. Company group ID cannot be changed. Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
   })
   @ApiResponse({
     status: 200,
-    description: 'Company updated successfully',
+    description:
+      'Company updated successfully. Response includes statistics fields (counts will be 0 as they are not calculated in this endpoint).',
     type: CompanyResponseDto,
   })
   @ApiResponse({
@@ -426,10 +313,10 @@ export class CompaniesController {
     status: 404,
     description: 'Company not found',
   })
-  async remove(
+  async delete(
     @Param('id') id: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<DeleteCompanyResponseDto> {
-    return this.companiesService.remove(id, req.user.id, req.userRoles);
+    return this.companiesService.delete(id, req.user.id, req.userRoles);
   }
 }

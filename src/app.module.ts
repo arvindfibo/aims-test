@@ -11,6 +11,7 @@ import { CompanyGroupsModule } from './company-groups/company-groups.module';
 import { TendersModule } from './tenders/tenders.module';
 import { DivisionsModule } from './divisions/divisions.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { DepartmentsModule } from './departments/departments.module';
     TendersModule,
     DivisionsModule,
     DepartmentsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

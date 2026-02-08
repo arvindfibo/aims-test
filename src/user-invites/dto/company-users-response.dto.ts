@@ -2,8 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class UserRoleDto {
   @ApiProperty({
-    description: 'Role ID',
+    description: 'Role ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   id: string;
 
@@ -29,8 +31,10 @@ export class UserRoleDto {
 
 export class CompanyUserDto {
   @ApiProperty({
-    description: 'User ID',
+    description: 'User ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   id: string;
 
@@ -107,8 +111,10 @@ export class CompanyUserDto {
 
 export class CompanyUsersResponseDto {
   @ApiProperty({
-    description: 'Company ID',
+    description: 'Company ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   company_id: string;
 
@@ -119,28 +125,32 @@ export class CompanyUsersResponseDto {
   company_name: string;
 
   @ApiProperty({
-    description: 'Division ID (if filtered by division)',
+    description: 'Division ID (UUID) - present if filtered by division',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
     nullable: true,
   })
   division_id: string | null;
 
   @ApiProperty({
-    description: 'Division name (if filtered by division)',
+    description: 'Division name - present if filtered by division',
     example: 'Engineering Division',
     nullable: true,
   })
   division_name: string | null;
 
   @ApiProperty({
-    description: 'Department ID (if filtered by department)',
+    description: 'Department ID (UUID) - present if filtered by department',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
     nullable: true,
   })
   department_id: string | null;
 
   @ApiProperty({
-    description: 'Department name (if filtered by department)',
+    description: 'Department name - present if filtered by department',
     example: 'Software Engineering',
     nullable: true,
   })

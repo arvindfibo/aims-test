@@ -11,10 +11,6 @@ export class RolesService {
     private readonly roleRepository: Repository<Role>,
   ) {}
 
-  /**
-   * Get all roles
-   * @returns Array of all roles
-   */
   async findAll(): Promise<RoleResponseDto[]> {
     const roles = await this.roleRepository.find({
       order: {
@@ -25,12 +21,6 @@ export class RolesService {
     return roles.map((role) => this.mapToResponseDto(role));
   }
 
-  /**
-   * Get a role by ID
-   * @param id - Role ID (UUID)
-   * @returns Role details
-   * @throws NotFoundException if role not found
-   */
   async findOne(id: string): Promise<RoleResponseDto> {
     const role = await this.roleRepository.findOne({
       where: { id },
@@ -43,11 +33,6 @@ export class RolesService {
     return this.mapToResponseDto(role);
   }
 
-  /**
-   * Map Role entity to RoleResponseDto
-   * @param role - Role entity
-   * @returns RoleResponseDto
-   */
   private mapToResponseDto(role: Role): RoleResponseDto {
     return {
       id: role.id,

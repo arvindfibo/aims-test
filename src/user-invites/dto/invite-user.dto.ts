@@ -1,5 +1,32 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsUUID, IsString, IsOptional, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsUUID,
+  IsString,
+  IsOptional,
+  MaxLength,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  Validate,
+  ValidationArguments,
+} from 'class-validator';
+
+@ValidatorConstraint({ name: 'exactlyOneResource', async: false })
+class ExactlyOneResourceConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments) {
+    const obj = args.object as InviteUserDto;
+    const resourceIds = [obj.company_id, obj.division_id, obj.department_id].filter(
+      (id) => id !== undefined && id !== null,
+    );
+
+    return resourceIds.length === 1;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  defaultMessage(_args: ValidationArguments) {
+    return 'Exactly one of company_id, division_id, or department_id must be provided';
+  }
+}
 
 export class InviteUserDto {
   @ApiProperty({
@@ -9,16 +36,47 @@ export class InviteUserDto {
   @IsEmail({}, { message: 'Email must be a valid email address' })
   email: string;
 
-  @ApiProperty({
-    description: 'Company ID to invite the user to',
+  @ApiPropertyOptional({
+    description:
+      'Company ID (UUID) to invite the user to. Exactly one of company_id, division_id, or department_id must be provided.',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
+  @IsOptional()
   @IsUUID('4', { message: 'Company ID must be a valid UUID' })
-  company_id: string;
+  company_id?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Division ID (UUID) to invite the user to. Exactly one of company_id, division_id, or department_id must be provided.',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'Division ID must be a valid UUID' })
+  division_id?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Department ID (UUID) to invite the user to. Exactly one of company_id, division_id, or department_id must be provided.',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'Department ID must be a valid UUID' })
+  department_id?: string;
+
+  @Validate(ExactlyOneResourceConstraint)
+  _validateExactlyOneResource?: never;
 
   @ApiProperty({
-    description: 'Role ID to assign to the user',
+    description: 'Role ID (UUID) to assign to the user',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   @IsUUID('4', { message: 'Role ID must be a valid UUID' })
   role_id: string;
@@ -52,28 +110,14 @@ export class InviteUserDto {
   @IsString({ message: 'Phone must be a string' })
   @MaxLength(20, { message: 'Phone must not exceed 20 characters' })
   phone?: string;
-
-  @ApiPropertyOptional({
-    description: 'Division ID (if applicable)',
-    example: '123e4567-e89b-12d3-a456-426614174000',
-  })
-  @IsOptional()
-  @IsUUID('4', { message: 'Division ID must be a valid UUID' })
-  division_id?: string;
-
-  @ApiPropertyOptional({
-    description: 'Department ID (if applicable)',
-    example: '123e4567-e89b-12d3-a456-426614174000',
-  })
-  @IsOptional()
-  @IsUUID('4', { message: 'Department ID must be a valid UUID' })
-  department_id?: string;
 }
 
 export class InviteUserResponseDto {
   @ApiProperty({
-    description: 'Invite ID',
+    description: 'Invite ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
   })
   id: string;
 
@@ -83,16 +127,37 @@ export class InviteUserResponseDto {
   })
   email: string;
 
-  @ApiProperty({
-    description: 'Company ID',
+  @ApiPropertyOptional({
+    description: 'Company ID (UUID) - present if invitation is for company level',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
+    nullable: true,
   })
-  company_id: string;
+  company_id?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Division ID (UUID) - present if invitation is for division level',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
+    nullable: true,
+  })
+  division_id?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Department ID (UUID) - present if invitation is for department level',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
+    format: 'uuid',
+    nullable: true,
+  })
+  department_id?: string | null;
 
   @ApiProperty({
-    description: 'Invite status',
+    description: 'Invitation status',
     example: 'pending',
-    enum: ['pending', 'accepted', 'expired'],
+    enum: ['pending', 'accepted', 'expired', 'rejected'],
   })
   invite_status: string;
 

@@ -73,7 +73,7 @@ export class Company {
   is_verified: boolean;
 
   @Column({ type: 'uuid', nullable: true })
-  company_admin_user_id: string | null;
+  company_admin_id: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, unknown> | null;
@@ -89,7 +89,7 @@ export class Company {
   company_group: CompanyGroup;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'company_admin_user_id' })
+  @JoinColumn({ name: 'company_admin_id' })
   company_admin: User | null;
 
   @ManyToOne(() => User)

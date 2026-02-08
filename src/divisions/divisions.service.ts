@@ -8,10 +8,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Not, IsNull, ILike } from 'typeorm';
+import { Repository, DataSource, Not, IsNull } from 'typeorm';
 import { Division } from '../entities/division.entity';
 import { Company } from '../entities/company.entity';
-import { CompanyGroup } from '../entities/company-group.entity';
+import { Department } from '../entities/department.entity';
+import { UserRole } from '../entities/user-role.entity';
 import { CreateDivisionDto, DivisionResponseDto } from './dto/create-division.dto';
 import { UpdateDivisionDto } from './dto/update-division.dto';
 import { DeleteDivisionResponseDto } from './dto/delete-division.dto';
@@ -27,8 +28,10 @@ export class DivisionsService {
     private readonly divisionRepository: Repository<Division>,
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
-    @InjectRepository(CompanyGroup)
-    private readonly companyGroupRepository: Repository<CompanyGroup>,
+    @InjectRepository(Department)
+    private readonly departmentRepository: Repository<Department>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -42,7 +45,6 @@ export class DivisionsService {
     await queryRunner.startTransaction();
 
     try {
-      // Verify company exists and is active
       const company = await queryRunner.manager.findOne(Company, {
         where: { id: createDivisionDto.company_id, deleted_at: IsNull() },
       });
@@ -51,16 +53,14 @@ export class DivisionsService {
         throw new NotFoundException(`Company with ID ${createDivisionDto.company_id} not found`);
       }
 
-      // Verify company is active
       if (!company.is_active) {
         throw new ForbiddenException('Company is not active');
       }
 
-      // Authorization check: COMPANY_ADMIN must be admin of the company
       const normalizedRoles = Array.isArray(userRoles) ? userRoles : [];
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
-      const isCompanyAdmin =
-        normalizedRoles.includes('COMPANY_ADMIN') && company.company_admin_user_id === userId;
+      const roleSet = new Set(normalizedRoles);
+      const isGroupAdmin = roleSet.has('GROUP_ADMIN');
+      const isCompanyAdmin = roleSet.has('COMPANY_ADMIN') && company.company_admin_id === userId;
 
       if (!isGroupAdmin && !isCompanyAdmin) {
         throw new ForbiddenException(
@@ -68,56 +68,49 @@ export class DivisionsService {
         );
       }
 
-      // Check if division name already exists in the same company
-      const existingDivisionByName = await queryRunner.manager.findOne(Division, {
-        where: {
-          company_id: createDivisionDto.company_id,
-          name: createDivisionDto.name,
-          deleted_at: IsNull(),
-        },
-      });
+      const uniquenessChecks = await Promise.all([
+        queryRunner.manager.findOne(Division, {
+          where: {
+            company_id: createDivisionDto.company_id,
+            name: createDivisionDto.name,
+            deleted_at: IsNull(),
+          },
+        }),
+        createDivisionDto.code
+          ? queryRunner.manager.findOne(Division, {
+              where: {
+                company_id: createDivisionDto.company_id,
+                code: createDivisionDto.code,
+                deleted_at: IsNull(),
+              },
+            })
+          : Promise.resolve(null),
+      ]);
 
-      if (existingDivisionByName) {
+      if (uniquenessChecks[0]) {
         throw new ConflictException(
           `Division with name "${createDivisionDto.name}" already exists in this company`,
         );
       }
 
-      // Check if division code already exists in the same company (if provided)
-      if (createDivisionDto.code) {
-        const existingDivisionByCode = await queryRunner.manager.findOne(Division, {
-          where: {
-            company_id: createDivisionDto.company_id,
-            code: createDivisionDto.code,
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (existingDivisionByCode) {
-          throw new ConflictException(
-            `Division with code "${createDivisionDto.code}" already exists in this company`,
-          );
-        }
+      if (uniquenessChecks[1]) {
+        throw new ConflictException(
+          `Division with code "${createDivisionDto.code}" already exists in this company`,
+        );
       }
 
-      // Create division entity
-      const division = this.divisionRepository.create({
+      const division = queryRunner.manager.create(Division, {
         company_id: createDivisionDto.company_id,
         name: createDivisionDto.name,
         code: createDivisionDto.code || null,
         description: createDivisionDto.description || null,
         is_active: createDivisionDto.is_active ?? true,
-        division_admin_user_id: createDivisionDto.division_admin_user_id || null,
+        division_admin_id: createDivisionDto.division_admin_id || null,
         created_by: userId,
         updated_by: userId,
       });
 
       const savedDivision = await queryRunner.manager.save(Division, division);
-
-      if (!savedDivision) {
-        throw new InternalServerErrorException('Failed to create division');
-      }
-
       await queryRunner.commitTransaction();
 
       this.logger.log(
@@ -138,6 +131,7 @@ export class DivisionsService {
 
       this.logger.error(
         `Failed to create division: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw new InternalServerErrorException('Failed to create division');
     } finally {
@@ -155,14 +149,28 @@ export class DivisionsService {
       throw new NotFoundException(`Division with ID ${divisionId} not found`);
     }
 
-    return this.mapToResponseDto(division);
+    const [usersCount, departmentsCount] = await Promise.all([
+      this.userRoleRepository
+        .createQueryBuilder('ur')
+        .select('COUNT(DISTINCT ur.user_id)', 'count')
+        .where('ur.division_id = :divisionId', { divisionId })
+        .andWhere('ur.deleted_at IS NULL')
+        .getRawOne()
+        .then((result: { count: string } | undefined) => parseInt(result?.count || '0', 10)),
+      this.departmentRepository
+        .createQueryBuilder('dept')
+        .where('dept.division_id = :divisionId', { divisionId })
+        .andWhere('dept.deleted_at IS NULL')
+        .getCount(),
+    ]);
+
+    return this.mapToResponseDto(division, usersCount, departmentsCount);
   }
 
   async findAllByCompany(
     companyId: string,
     query: ListDivisionsQueryDto,
   ): Promise<PaginatedDivisionsResponseDto> {
-    // Verify company exists
     const company = await this.companyRepository.findOne({
       where: { id: companyId, deleted_at: IsNull() },
     });
@@ -176,37 +184,44 @@ export class DivisionsService {
     const sortBy = query.sort_by ?? 'created_at';
     const sortOrder = query.sort_order === 'ASC' ? 'ASC' : 'DESC';
 
-    const where: Record<string, unknown> = {
-      company_id: companyId,
-      deleted_at: IsNull(),
-    };
+    const qb = this.divisionRepository.createQueryBuilder('division');
+    qb.where('division.company_id = :companyId', { companyId });
+    qb.andWhere('division.deleted_at IS NULL');
+
     if (query.name?.trim()) {
-      where.name = ILike(`%${query.name.trim()}%`);
+      qb.andWhere('division.name ILIKE :name', { name: `%${query.name.trim()}%` });
     }
+
     if (query.code?.trim()) {
-      where.code = ILike(`%${query.code.trim()}%`);
+      qb.andWhere('division.code ILIKE :code', { code: `%${query.code.trim()}%` });
     }
+
     if (query.is_active !== undefined) {
-      where.is_active = query.is_active;
+      qb.andWhere('division.is_active = :isActive', { isActive: query.is_active });
     }
 
-    const [divisions, total] = await this.divisionRepository.findAndCount({
-      where,
-      order: { [sortBy]: sortOrder },
-      skip: safeOffset,
-      take: safeLimit,
-    });
+    const sortFieldMap: Record<string, string> = {
+      name: 'division.name',
+      code: 'division.code',
+      is_active: 'division.is_active',
+      created_at: 'division.created_at',
+      updated_at: 'division.updated_at',
+    };
 
-    const data = divisions.map((division) => this.mapToResponseDto(division));
-    const hasMore = safeOffset + divisions.length < total;
+    const sortField = sortFieldMap[sortBy] || 'division.created_at';
+    qb.orderBy(sortField, sortOrder);
+    qb.skip(safeOffset);
+    qb.take(safeLimit);
+
+    const [divisions, total] = await qb.getManyAndCount();
 
     return {
-      data,
+      data: divisions.map((division) => this.mapToResponseDto(division)),
       pagination: {
         total,
         offset: safeOffset,
         limit: safeLimit,
-        hasMore,
+        hasMore: safeOffset + divisions.length < total,
       },
     };
   }
@@ -231,27 +246,25 @@ export class DivisionsService {
         throw new NotFoundException(`Division with ID ${divisionId} not found`);
       }
 
-      // Get company and company group for authorization check
-      const company = await queryRunner.manager.findOne(Company, {
+      const companyForAuth = await queryRunner.manager.findOne(Company, {
         where: { id: division.company_id },
-        relations: ['company_group'],
       });
 
-      if (!company) {
+      if (!companyForAuth) {
         throw new NotFoundException(`Company with ID ${division.company_id} not found`);
       }
 
-      if (!company.is_active) {
+      if (!companyForAuth.is_active) {
         throw new ForbiddenException('Company is not active');
       }
 
-      // Authorization check
       const normalizedRoles = Array.isArray(userRoles) ? userRoles : [];
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+      const roleSet = new Set(normalizedRoles);
+      const isGroupAdmin = roleSet.has('GROUP_ADMIN');
       const isCompanyAdmin =
-        normalizedRoles.includes('COMPANY_ADMIN') && company.company_admin_user_id === userId;
+        roleSet.has('COMPANY_ADMIN') && companyForAuth.company_admin_id === userId;
       const isDivisionAdmin =
-        normalizedRoles.includes('DIVISION_ADMIN') && division.division_admin_user_id === userId;
+        roleSet.has('DIVISION_ADMIN') && division.division_admin_id === userId;
 
       if (!isGroupAdmin && !isCompanyAdmin && !isDivisionAdmin) {
         throw new ForbiddenException('Access denied to update this division');
@@ -261,83 +274,67 @@ export class DivisionsService {
         'name',
         'code',
         'description',
-        'division_admin_user_id',
+        'division_admin_id',
         'is_active',
       ];
 
-      const hasUpdates = updatableFields.some(
-        (field) => typeof updateDivisionDto[field] !== 'undefined',
-      );
+      const hasUpdates = updatableFields.some((field) => updateDivisionDto[field] !== undefined);
 
       if (!hasUpdates) {
         throw new BadRequestException('No valid fields provided for update');
       }
 
-      // Check for duplicate name if updating name
-      if (updateDivisionDto.name !== undefined) {
-        const existingDivision = await queryRunner.manager.findOne(Division, {
-          where: {
-            company_id: division.company_id,
-            name: updateDivisionDto.name,
-            id: Not(division.id),
-            deleted_at: IsNull(),
-          },
-        });
+      const uniquenessChecks = await Promise.all([
+        updateDivisionDto.name !== undefined
+          ? queryRunner.manager.findOne(Division, {
+              where: {
+                company_id: division.company_id,
+                name: updateDivisionDto.name,
+                id: Not(division.id),
+                deleted_at: IsNull(),
+              },
+            })
+          : Promise.resolve(null),
+        updateDivisionDto.code !== undefined && updateDivisionDto.code
+          ? queryRunner.manager.findOne(Division, {
+              where: {
+                company_id: division.company_id,
+                code: updateDivisionDto.code,
+                id: Not(division.id),
+                deleted_at: IsNull(),
+              },
+            })
+          : Promise.resolve(null),
+      ]);
 
-        if (existingDivision) {
-          throw new ConflictException(
-            `Division with name "${updateDivisionDto.name}" already exists in this company`,
-          );
-        }
+      if (uniquenessChecks[0]) {
+        throw new ConflictException(
+          `Division with name "${updateDivisionDto.name}" already exists in this company`,
+        );
       }
 
-      // Check for duplicate code if updating code
-      if (updateDivisionDto.code !== undefined && updateDivisionDto.code) {
-        const existingDivision = await queryRunner.manager.findOne(Division, {
-          where: {
-            company_id: division.company_id,
-            code: updateDivisionDto.code,
-            id: Not(division.id),
-            deleted_at: IsNull(),
-          },
-        });
-
-        if (existingDivision) {
-          throw new ConflictException(
-            `Division with code "${updateDivisionDto.code}" already exists in this company`,
-          );
-        }
+      if (uniquenessChecks[1]) {
+        throw new ConflictException(
+          `Division with code "${updateDivisionDto.code}" already exists in this company`,
+        );
       }
 
-      // Update fields
-      if (updateDivisionDto.name !== undefined) {
-        division.name = updateDivisionDto.name;
-      }
-
-      if (updateDivisionDto.code !== undefined) {
-        division.code = updateDivisionDto.code || null;
-      }
-
-      if (updateDivisionDto.description !== undefined) {
-        division.description = updateDivisionDto.description || null;
-      }
-
-      if (updateDivisionDto.division_admin_user_id !== undefined) {
-        division.division_admin_user_id = updateDivisionDto.division_admin_user_id || null;
-      }
-
-      if (updateDivisionDto.is_active !== undefined) {
-        division.is_active = updateDivisionDto.is_active;
-      }
-
-      division.updated_by = userId;
+      Object.assign(division, {
+        ...(updateDivisionDto.name !== undefined && { name: updateDivisionDto.name }),
+        ...(updateDivisionDto.code !== undefined && { code: updateDivisionDto.code || null }),
+        ...(updateDivisionDto.description !== undefined && {
+          description: updateDivisionDto.description || null,
+        }),
+        ...(updateDivisionDto.division_admin_id !== undefined && {
+          division_admin_id: updateDivisionDto.division_admin_id || null,
+        }),
+        ...(updateDivisionDto.is_active !== undefined && {
+          is_active: updateDivisionDto.is_active,
+        }),
+        updated_by: userId,
+      });
 
       const savedDivision = await queryRunner.manager.save(Division, division);
-
-      if (!savedDivision) {
-        throw new InternalServerErrorException('Failed to update division');
-      }
-
       await queryRunner.commitTransaction();
 
       this.logger.log(`Division "${savedDivision.name}" updated successfully by user ${userId}`);
@@ -357,6 +354,7 @@ export class DivisionsService {
 
       this.logger.error(
         `Failed to update division: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw new InternalServerErrorException('Failed to update division');
     } finally {
@@ -383,42 +381,37 @@ export class DivisionsService {
         throw new NotFoundException(`Division with ID ${divisionId} not found`);
       }
 
-      // Get company for authorization check
-      const company = await queryRunner.manager.findOne(Company, {
+      const companyForAuth = await queryRunner.manager.findOne(Company, {
         where: { id: division.company_id },
       });
 
-      if (!company) {
+      if (!companyForAuth) {
         throw new NotFoundException(`Company with ID ${division.company_id} not found`);
       }
 
-      if (!company.is_active) {
+      if (!companyForAuth.is_active) {
         throw new ForbiddenException('Company is not active');
       }
 
-      // Authorization check
       const normalizedRoles = Array.isArray(userRoles) ? userRoles : [];
-      const isGroupAdmin = normalizedRoles.includes('GROUP_ADMIN');
+      const roleSet = new Set(normalizedRoles);
+      const isGroupAdmin = roleSet.has('GROUP_ADMIN');
       const isCompanyAdmin =
-        normalizedRoles.includes('COMPANY_ADMIN') && company.company_admin_user_id === userId;
+        roleSet.has('COMPANY_ADMIN') && companyForAuth.company_admin_id === userId;
       const isDivisionAdmin =
-        normalizedRoles.includes('DIVISION_ADMIN') && division.division_admin_user_id === userId;
+        roleSet.has('DIVISION_ADMIN') && division.division_admin_id === userId;
 
       if (!isGroupAdmin && !isCompanyAdmin && !isDivisionAdmin) {
         throw new ForbiddenException('Access denied to delete this division');
       }
 
-      // Soft delete
-      division.deleted_at = new Date();
-      division.updated_by = userId;
-      division.is_active = false;
+      Object.assign(division, {
+        deleted_at: new Date(),
+        updated_by: userId,
+        is_active: false,
+      });
 
       const savedDivision = await queryRunner.manager.save(Division, division);
-
-      if (!savedDivision) {
-        throw new InternalServerErrorException('Failed to delete division');
-      }
-
       await queryRunner.commitTransaction();
 
       this.logger.log(`Division "${savedDivision.name}" deleted successfully by user ${userId}`);
@@ -441,6 +434,7 @@ export class DivisionsService {
 
       this.logger.error(
         `Failed to delete division: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw new InternalServerErrorException('Failed to delete division');
     } finally {
@@ -448,7 +442,11 @@ export class DivisionsService {
     }
   }
 
-  private mapToResponseDto(division: Division): DivisionResponseDto {
+  private mapToResponseDto(
+    division: Division,
+    usersCount: number = 0,
+    departmentsCount: number = 0,
+  ): DivisionResponseDto {
     return {
       id: division.id,
       company_id: division.company_id,
@@ -456,9 +454,11 @@ export class DivisionsService {
       code: division.code || undefined,
       description: division.description || undefined,
       is_active: division.is_active,
-      division_admin_user_id: division.division_admin_user_id || undefined,
+      division_admin_id: division.division_admin_id || undefined,
       created_at: division.created_at,
       updated_at: division.updated_at,
+      users_count: usersCount,
+      departments_count: departmentsCount,
     };
   }
 }

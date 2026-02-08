@@ -13,8 +13,16 @@ import {
   UsePipes,
   ValidationPipe,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
 import type { Request as ExpressRequest } from 'express';
 import { TendersService } from './tenders.service';
 import { CreateTenderDto, TenderResponseDto } from './dto/create-tender.dto';
@@ -98,8 +106,6 @@ export class TendersController {
   @ApiQuery({ name: 'tender_code', required: false, description: 'Filter by tender code' })
   @ApiQuery({ name: 'authority', required: false, description: 'Filter by authority' })
   @ApiQuery({ name: 'client_name', required: false, description: 'Filter by client name' })
-  @ApiQuery({ name: 'nit_number', required: false, description: 'Filter by NIT number' })
-  @ApiQuery({ name: 'name_of_work', required: false, description: 'Filter by name of work' })
   @ApiQuery({
     name: 'tender_status',
     required: false,
@@ -257,6 +263,14 @@ export class TendersController {
   }
 
   @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({
+    name: 'id',
+    description: 'Tender ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Get a tender by ID',
     description:
@@ -275,11 +289,19 @@ export class TendersController {
     status: 404,
     description: 'Tender not found',
   })
-  async findOne(@Param('id') id: string): Promise<TenderResponseDto> {
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<TenderResponseDto> {
     return this.tendersService.findOne(id);
   }
 
   @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({
+    name: 'id',
+    description: 'Tender ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Update a tender',
     description:
@@ -308,7 +330,7 @@ export class TendersController {
   })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTenderDto: UpdateTenderDto,
     @Request() req: AuthenticatedRequest,
   ): Promise<TenderResponseDto> {
@@ -317,6 +339,13 @@ export class TendersController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
+  @ApiParam({
+    name: 'id',
+    description: 'Tender ID (UUID)',
+    type: String,
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiOperation({
     summary: 'Delete a tender',
     description:
@@ -335,7 +364,10 @@ export class TendersController {
     status: 404,
     description: 'Tender not found',
   })
-  async remove(@Param('id') id: string): Promise<DeleteTenderResponseDto> {
-    return this.tendersService.remove(id);
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<DeleteTenderResponseDto> {
+    return this.tendersService.remove(id, req.user.id);
   }
 }

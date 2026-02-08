@@ -9,10 +9,7 @@ import { UserRole } from '../entities/user-role.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Tender, Company, Role, UserRole]),
-    AuthModule, // Import AuthModule to get access to RolesGuard and its dependencies
-  ],
+  imports: [TypeOrmModule.forFeature([Tender, Company, Role, UserRole]), AuthModule],
   controllers: [TendersController],
   providers: [TendersService],
   exports: [TendersService],
